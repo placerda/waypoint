@@ -87,7 +87,7 @@ not empty/default production endpoints.
 | --- | --- |
 | Web | `API_ENDPOINT_HTTP` = private API HTTPS URL; `WAYPOINT_MSAL_ENABLED=true`; `WAYPOINT_MSAL_TENANT_ID`, `WAYPOINT_MSAL_CLIENT_ID`, `WAYPOINT_MSAL_API_SCOPE`, `WAYPOINT_MSAL_REDIRECT_URI` |
 | API auth | `APP_MSAL_BEARER_VALIDATION_ENABLED=true`; `APP_MSAL_TENANT_ID`, `APP_MSAL_CLIENT_ID` = API token audience, `APP_MSAL_REQUIRED_SCOPE=user_impersonation`; `APP_MSAL_ALLOWED_APP_IDS` = allowed hosted-agent app/client IDs; `APP_CORS_ALLOWED_ORIGINS` = private web origin |
-| API persistence | `APP_DATABASE_CONNECTION` = TLS PostgreSQL least-privilege application DSN, provided through a secret reference; `APP_REQUIRE_POSTGRES=true`; `APP_RUN_STARTUP_DATABASE_BOOTSTRAP=false` |
+| API persistence | `APP_DATABASE_CONNECTION` = password-free TLS PostgreSQL application DSN through a secret reference; `APP_DATABASE_ENTRA_ENABLED=true`; `APP_DATABASE_ENTRA_CLIENT_ID` = API user-assigned managed identity client ID; `APP_REQUIRE_POSTGRES=true`; `APP_RUN_STARTUP_DATABASE_BOOTSTRAP=false` |
 | API corpus | `APP_LEDGERFIELD_SEED_PATH=/app/corpus/data/waypoint/waypoint-seed.json`; `APP_CORPUS_LOCAL_ROOT=/app/corpus`; `APP_SEED_REQUIRED=true`; `APP_DEFAULT_SEED_ENABLED=false` |
 | API agent invocation | `APP_FOUNDRY_ENDPOINT` = new agent project endpoint; `APP_FOUNDRY_ORCHESTRATOR_AGENT_NAME=contract-agent` |
 | Agent project | `FOUNDRY_PROJECT_ENDPOINT` = new agent project `/api/projects/<project>` endpoint, with **no model deployments** |
@@ -106,13 +106,83 @@ implicitly. Browser auth has no local/API-key fallback in the deployed settings.
 The agent requires managed bearer auth, HTTPS and certificate validation for API
 tools, regardless of historical insecure/key settings.
 
-Before the API starts, the database owner must run its existing idempotent
-`python -m app.bootstrap` command with the least-privilege application DSN and
-the separately supplied privileged `APP_DATABASE_BOOTSTRAP_CONNECTION`. Do not
-give that privileged connection to the request-serving process. A missing DSN
-or required seed fails startup instead of reporting success with memory/empty
-data. Region, database ownership, network and bootstrap execution remain the
-infrastructure owner's responsibility.
+### Entra-only PostgreSQL identity and bootstrap
+
+The deployed server keeps **password authentication disabled**. The native
+repository uses **psycopg 3 / psycopg_pool 3.3.1**, not asyncpg. Its async
+per-physical-connection `kwargs` callback asks the configured API managed
+identity for `https://ossrdbms-aad.database.windows.net/.default` every time
+the pool opens or replaces a connection. Azure Identity refreshes its token
+cache; the application does not retain one startup token or insert a token
+into the DSN. Token failures fail the connection with no password fallback.
+The installed synchronous identity transport runs through `asyncio.to_thread`,
+so token HTTP calls do not block the event loop or require an absent optional
+aiohttp dependency. Pool shutdown, configuration replacement and initialization
+failure release its owned credential.
+
+Use the same API user-assigned identity already bound to the native API and
+Key Vault reference. `APP_DATABASE_ENTRA_CLIENT_ID` is its **client ID**, not a
+Web/API Entra application-registration ID. Runtime uses
+`ManagedIdentityCredential`, not developer or environment-client-secret
+fallback. A password-free runtime URI has this shape:
+
+```text
+postgresql://<runtime-role>@<server-FQDN>:5432/<appdb>?sslmode=verify-full&sslrootcert=system
+```
+
+Percent-encode the role/database names when necessary. Explicit host, database,
+user, verified TLS and CA trust are mandatory. Password, passfile, service,
+host-address override and SSL-password DSN fields are rejected. The frozen
+psycopg binary/libpq supports system CA trust; an explicit trusted CA file is
+also allowed. Existing authenticated sessions are not discarded solely because
+their original login token expires; replacement connections get refreshed
+credentials. All connections use `search_path=public`.
+
+Before the API starts, run the idempotent **`python -m app.bootstrap`** under a
+separate PostgreSQL **Entra administrator/deployment identity**, from an
+approved private-network execution host. Azure subscription Owner alone does
+not supply SQL access. Its bootstrap-only inputs are:
+
+| Input | Meaning |
+| --- | --- |
+| `APP_DATABASE_ENTRA_ENABLED=true` | Select the Entra bootstrap path, never legacy password-role creation |
+| `APP_DATABASE_CONNECTION` | The password-free runtime-role DSN above; role name is the SQL login mapped to the API UAI |
+| `APP_DATABASE_BOOTSTRAP_CONNECTION` | Password-free administrator DSN for the **same server**, database **`postgres`**, with `sslmode=verify-full&sslrootcert=system` |
+| `APP_DATABASE_ENTRA_PRINCIPAL_ID` | API UAI **principal/object ID**, not its client ID or an Entra app-registration ID |
+| `APP_DATABASE_BOOTSTRAP_CLIENT_ID` | Optional dedicated bootstrap UAI client ID; otherwise the deployment process's authorized `DefaultAzureCredential` identity |
+
+Bootstrap maps the API role with
+`pgaadauth_create_principal_with_oid(role, objectId, 'service', false, false)`.
+It rejects mismatched/unmapped existing roles, administrative runtime roles,
+and runtime ownership of the database, schema or tables. The administrator
+creates/owns the app database and applies native `_SCHEMA_SQL`; the API does
+not execute schema DDL on startup. The explicit runtime grants are:
+
+```sql
+GRANT CONNECT ON DATABASE "<appdb>" TO "<runtime-role>";
+REVOKE CREATE ON DATABASE "<appdb>" FROM "<runtime-role>";
+REVOKE CREATE, TEMPORARY ON DATABASE "<appdb>" FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE CREATE ON SCHEMA public FROM "<runtime-role>";
+GRANT USAGE ON SCHEMA public TO "<runtime-role>";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "<runtime-role>";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "<runtime-role>";
+```
+
+Default privileges apply to tables subsequently created by that bootstrap
+identity. The native schema has no sequences requiring additional grants.
+There is no runtime `CREATE`, `CREATEROLE`, `CREATEDB`, replication or admin
+grant. Keep the bootstrap administrator distinct from the runtime role.
+Fabric mirroring is explicitly unsupported in this bounded Entra bootstrap.
+
+**Never supply any bootstrap-only inputs to the request-serving API.** Its
+configuration rejects them. The runtime keeps only its password-free DSN
+reference, UAI client ID, bounded pool and DML permissions. Missing PostgreSQL
+or required seed fails startup rather than reporting memory/empty-data success.
+Actual principal mapping, private connectivity and live post-expiry reconnect/
+durability checks remain deployment acceptance gates; offline tests are not
+proof that SQL bootstrap has run.
 
 ### Small PostgreSQL footprint
 
@@ -241,7 +311,7 @@ python -m unittest discover -s tests -v
 Set-Location modules\agents\contract-agent
 uv run --frozen python -m unittest discover -s tests -v
 Set-Location ..\..\..\apps\waypoint\api
-uv run --frozen pytest tests\test_private_application.py tests\test_app_role_auth.py tests\test_user_auth.py tests\test_assurance_runs.py tests\test_onelake_corpus.py -q
+uv run --frozen pytest tests\test_postgres_entra.py tests\test_private_application.py tests\test_app_role_auth.py tests\test_user_auth.py tests\test_assurance_runs.py tests\test_onelake_corpus.py tests\test_app_simplification.py -q
 Set-Location ..\web
 npm run typecheck
 node --test tests\private-config.test.mjs

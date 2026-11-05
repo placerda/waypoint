@@ -45,6 +45,7 @@ from ..modules.records.schemas import (
     Supplier,
 )
 from ..modules.runs.schemas import AgentRun
+from .postgres_entra import EntraPostgresPassword, validate_entra_connection
 
 # FabricIQ typed analytics projection.
 #
@@ -865,20 +866,33 @@ class PostgresWaypointRepository:
         *,
         min_pool_size: int = 1,
         max_pool_size: int = 10,
+        entra_enabled: bool = False,
+        entra_client_id: str = "",
     ) -> None:
         self.connection_string = _normalize_postgres_connection_string(connection_string)
+        self._entra_enabled = entra_enabled
+        self._entra_password: EntraPostgresPassword | None = None
+        if entra_enabled:
+            validate_entra_connection(self.connection_string)
+            if not entra_client_id:
+                raise ValueError("APP_DATABASE_ENTRA_CLIENT_ID is required for the API identity")
+            self._entra_password = EntraPostgresPassword(entra_client_id)
         self._pool = AsyncConnectionPool(
             self.connection_string,
             min_size=min_pool_size,
             max_size=max_pool_size,
-            kwargs={"autocommit": True, "row_factory": dict_row},
+            kwargs=(
+                self._entra_password.kwargs if self._entra_password
+                else {"autocommit": True, "row_factory": dict_row}
+            ),
             open=False,
         )
 
     async def initialize(self, load_default_seed: bool = True) -> None:
         await self._pool.open(wait=True)
-        async with self._pool.connection() as connection:
-            await connection.execute(_SCHEMA_SQL)
+        if not self._entra_enabled:
+            async with self._pool.connection() as connection:
+                await connection.execute(_SCHEMA_SQL)
         for action_type in DEFAULT_ACTION_TYPES:
             await self._upsert_payload(
                 "action_types", action_type.id, action_type.model_dump(mode="json")
@@ -887,7 +901,11 @@ class PostgresWaypointRepository:
             await self.import_seed(DEFAULT_LEDGERFIELD_SEED)
 
     async def close(self) -> None:
-        await self._pool.close()
+        try:
+            await self._pool.close()
+        finally:
+            if self._entra_password:
+                await self._entra_password.close()
 
     async def remove_default_seed(self) -> None:
         async with self._pool.connection() as connection:

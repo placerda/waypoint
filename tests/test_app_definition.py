@@ -21,6 +21,15 @@ class ApplicationContractTests(unittest.TestCase):
             self.assertNotIn("roles", component)
             if component["kind"] == "containerapp":
                 self.assertEqual(component["ingress"], "external")
+                if component["name"] == "api":
+                    settings = {s["key"]: s for s in component["settings"]}
+                    self.assertIs(settings["APP_DATABASE_ENTRA_ENABLED"]["value"], True)
+                    self.assertNotIn("value", settings["APP_DATABASE_ENTRA_CLIENT_ID"])
+                    self.assertTrue({
+                        "APP_DATABASE_BOOTSTRAP_CONNECTION",
+                        "APP_DATABASE_ENTRA_PRINCIPAL_ID",
+                        "APP_DATABASE_BOOTSTRAP_CLIENT_ID",
+                    }.isdisjoint(settings))
             else:
                 self.assertNotIn("resources", component)
                 self.assertNotIn("ingress", component)

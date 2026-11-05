@@ -32,6 +32,22 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL/HorizonDB-compatible connection string",
     )
+    database_entra_enabled: bool = Field(
+        default=False,
+        description="Use refreshable managed-identity PostgreSQL credentials, never a DSN password",
+    )
+    database_entra_client_id: str = Field(
+        default="",
+        description="Client ID of the API's user-assigned managed identity",
+    )
+    database_entra_principal_id: str = Field(
+        default="",
+        description="Bootstrap-only API identity object ID for pgaadauth role mapping",
+    )
+    database_bootstrap_client_id: str = Field(
+        default="",
+        description="Optional bootstrap-job managed identity client ID, not the runtime identity",
+    )
     require_postgres: bool = Field(
         default=False,
         description="Fail closed instead of silently using ephemeral in-memory persistence",

@@ -6,6 +6,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY app ./app
 COPY corpus ./corpus
 ENV APP_REQUIRE_POSTGRES=true \
+    APP_DATABASE_ENTRA_ENABLED=true \
     APP_DATABASE_POOL_MIN_SIZE=1 \
     APP_DATABASE_POOL_MAX_SIZE=4 \
     APP_MSAL_BEARER_VALIDATION_ENABLED=true \

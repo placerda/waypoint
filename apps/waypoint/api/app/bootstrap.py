@@ -14,6 +14,10 @@ It is idempotent and safe to re-run. Any failure propagates and exits non-zero -
 bootstrap failures are never silently swallowed. When the deploy pipeline runs this command it
 should also set ``APP_RUN_STARTUP_DATABASE_BOOTSTRAP=false`` so the API startup skips the
 privileged path entirely.
+
+Entra-only deployments map the API managed identity by object ID and apply schema
+as the separate deployment administrator, then grant runtime DML only. They never
+create a password login or connect as the API identity to perform schema DDL.
 """
 
 import asyncio

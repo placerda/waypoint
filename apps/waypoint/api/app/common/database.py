@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import psycopg
 from fastapi import Depends
@@ -30,8 +30,16 @@ async def get_waypoint_repository(
 async def get_waypoint_repository_for_settings(settings: Settings) -> "WaypointRepository":
     """Return a singleton repository for the current database configuration."""
 
-    if settings.require_postgres and not settings.database_connection:
+    if (
+        settings.require_postgres or settings.database_entra_enabled
+    ) and not settings.database_connection:
         raise ValueError("APP_DATABASE_CONNECTION is required; in-memory fallback is disabled")
+    if settings.database_entra_enabled and any((
+        settings.database_bootstrap_connection,
+        settings.database_entra_principal_id,
+        settings.database_bootstrap_client_id,
+    )):
+        raise ValueError("Bootstrap-only settings must not be supplied to the API runtime")
 
     from ..modules.records.service import WaypointService
     from .repository import InMemoryWaypointRepository, PostgresWaypointRepository
@@ -40,12 +48,17 @@ async def get_waypoint_repository_for_settings(settings: Settings) -> "WaypointR
     repository_key = (
         f"{settings.database_connection}|"
         f"{settings.database_bootstrap_connection}|"
+        f"{settings.database_entra_enabled}|{settings.database_entra_client_id}|"
         f"{settings.ledgerfield_seed_path}|"
         f"{settings.ledgerfield_seed_uri}|"
         f"{settings.default_seed_enabled}|{settings.seed_required}"
     )
     if _repository is not None and _repository_connection == repository_key:
         return _repository
+    if _repository is not None:
+        await _repository.close()
+        _repository = None
+        _repository_connection = None
 
     if settings.database_connection:
         run_privileged_bootstrap = (
@@ -56,22 +69,31 @@ async def get_waypoint_repository_for_settings(settings: Settings) -> "WaypointR
                 settings.database_bootstrap_connection,
                 settings.database_connection,
             )
+        entra_options: dict[str, Any] = (
+            {"entra_enabled": True, "entra_client_id": settings.database_entra_client_id}
+            if settings.database_entra_enabled else {}
+        )
         postgres_repository = PostgresWaypointRepository(
             settings.database_connection,
             min_pool_size=settings.database_pool_min_size,
             max_pool_size=settings.database_pool_max_size,
+            **entra_options,
         )
-        await postgres_repository.initialize(
-            load_default_seed=settings.default_seed_enabled
-            and not _has_configured_seed_source(settings)
-        )
-        if settings.fabric_mirror_enabled and run_privileged_bootstrap:
-            await _bootstrap_fabric_mirroring_role(
-                settings.database_bootstrap_connection,
-                settings.database_connection,
-                settings,
+        try:
+            await postgres_repository.initialize(
+                load_default_seed=settings.default_seed_enabled
+                and not _has_configured_seed_source(settings)
             )
-        await _import_configured_seed(postgres_repository, settings, WaypointService)
+            if settings.fabric_mirror_enabled and run_privileged_bootstrap:
+                await _bootstrap_fabric_mirroring_role(
+                    settings.database_bootstrap_connection,
+                    settings.database_connection,
+                    settings,
+                )
+            await _import_configured_seed(postgres_repository, settings, WaypointService)
+        except BaseException:
+            await postgres_repository.close()
+            raise
         _repository = postgres_repository
         _repository_connection = repository_key
         logger.info("Configured PostgreSQL Waypoint repository")
@@ -108,6 +130,12 @@ async def bootstrap_database(settings: Settings) -> None:
         raise ValueError(
             "APP_DATABASE_BOOTSTRAP_CONNECTION must be configured to bootstrap the database"
         )
+    if settings.database_entra_enabled:
+        from .postgres_entra import bootstrap_entra_database
+
+        await bootstrap_entra_database(settings)
+        logger.info("Completed out-of-band Entra-only database bootstrap")
+        return
 
     await _bootstrap_postgres_application_role(
         settings.database_bootstrap_connection,
