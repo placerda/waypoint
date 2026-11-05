@@ -18,7 +18,9 @@ import { createRequestHandler } from "@react-router/express";
 import compression from "compression";
 import express from "express";
 import { createProxyMiddleware, fixRequestBody } from "http-proxy-middleware";
+import { validatePrivateConfiguration } from "./private-config.js";
 
+validatePrivateConfiguration(process.env);
 const app = express();
 
 function getOtlpHttpTarget() {
@@ -238,6 +240,7 @@ app.all("*", createRequestHandler({ build }));
 
 // Start server
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+const host = process.env.HOST || "0.0.0.0";
+app.listen(port, host, () => {
   console.log(`Server running at http://localhost:${port}`);
 });

@@ -1,11 +1,9 @@
 import type { MetaFunction } from "react-router";
 import { Link } from "react-router";
 import {
-  HiChartBar,
   HiChevronRight,
   HiDocumentSearch,
   HiLightningBolt,
-  HiShieldCheck,
 } from "react-icons/hi";
 import { AppHeader } from "../components/AppHeader";
 import { RequireAuth } from "../components/RequireAuth";
@@ -18,8 +16,6 @@ export const meta: MetaFunction = ({ location }) => pageMeta(location, "home");
 const destinations = [
   { key: "invoices", icon: HiDocumentSearch, to: "/invoices" },
   { key: "activity", icon: HiLightningBolt, to: "/activity" },
-  { key: "agent", icon: HiShieldCheck, to: "/agent" },
-  { key: "quality", icon: HiChartBar, to: "/quality" },
 ] as const;
 
 const principles = ["showWork", "keepControl", "reduceLoad"] as const;
@@ -60,7 +56,7 @@ export default function Home() {
                   {t("hero.reviewInvoices")}
                 </Link>
                 <Link
-                  to={localize("/agent")}
+                  to={localize("/activity")}
                   className="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50 max-md:min-h-11"
                 >
                   {t("hero.viewAgentRuns")}
@@ -72,7 +68,7 @@ export default function Home() {
               aria-label={t("areasLabel")}
               className="border-t border-slate-200"
             >
-              <ul className="grid gap-px bg-slate-100 md:grid-cols-2 xl:grid-cols-4">
+              <ul className="grid gap-px bg-slate-100 md:grid-cols-2">
                 {destinations.map((destination) => (
                   <li key={destination.to} className="bg-white">
                     <Link

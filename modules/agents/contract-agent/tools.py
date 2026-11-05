@@ -22,6 +22,8 @@ from typing import Any
 import httpx
 from castia.inference.tools import Tool
 from dotenv import load_dotenv
+from opentelemetry.propagate import inject
+from gateway import https_endpoint, required_env
 
 load_dotenv()
 
@@ -52,20 +54,15 @@ def is_waypoint_configured() -> bool:
 class _WaypointClient:
     """A thin async reader over the Waypoint API.
 
-    Auth mirrors the deployed agents: an ``x-api-key`` when one is configured,
-    otherwise a bearer token minted from the agent's managed identity for
-    ``WAYPOINT_API_SCOPE`` (``az login`` locally). No scope and no key means an
-    unauthenticated GET, which the local dev API accepts.
+    Requires a managed-identity bearer for the configured native API scope.
+    There is no API-key, unauthenticated, or insecure-TLS fallback.
     """
 
     def __init__(self) -> None:
-        base = _usable_env("WAYPOINT_API_BASE_URL") or ""
-        if base and not base.startswith(("http://", "https://")):
-            base = f"https://{base}"
-        self._base = base.rstrip("/")
-        self._scope = _usable_env("WAYPOINT_API_SCOPE")
-        self._api_key = _usable_env("WAYPOINT_API_KEY")
-        self._verify = _env_bool("WAYPOINT_API_VERIFY_SSL", default=True)
+        base = required_env("WAYPOINT_API_BASE_URL")
+        self._base = https_endpoint(base, suffix="").rstrip("/")
+        self._scope = required_env("WAYPOINT_API_SCOPE")
+        self._verify = True
         self._credential: Any | None = None
 
     def _url(self, path: str) -> str:
@@ -75,27 +72,23 @@ class _WaypointClient:
 
     async def _headers(self) -> dict[str, str]:
         headers = {"Accept": "application/json"}
-        # Prefer the agent-identity bearer when a scope is configured; only fall
-        # back to an API key when no scope is set (the Waypoint API rejects
-        # x-api-key when server-side key auth is disabled).
-        if self._scope:
-            if self._credential is None:
-                from azure.identity.aio import DefaultAzureCredential
+        inject(headers)
+        if self._credential is None:
+            from azure.identity.aio import DefaultAzureCredential
 
-                self._credential = DefaultAzureCredential()
-            token = await self._credential.get_token(self._scope)
-            headers["Authorization"] = f"Bearer {token.token}"
-        elif self._api_key:
-            headers["x-api-key"] = self._api_key
+            self._credential = DefaultAzureCredential()
+        token = await self._credential.get_token(self._scope)
+        headers["Authorization"] = f"Bearer {token.token}"
         return headers
 
     async def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
         headers = await self._headers()
         async with httpx.AsyncClient(timeout=30.0, verify=self._verify) as client:
             response = await client.get(self._url(path), headers=headers, params=params)
-        if response.status_code in {401, 403, 404}:
+        if response.status_code == 404:
             return None
-        if response.is_error or not response.content:
+        response.raise_for_status()
+        if not response.content:
             return None
         return response.json()
 
@@ -120,11 +113,11 @@ class _WaypointClient:
         return _as_list(await self._get("/api/evidence", {"invoice_id": invoice_id}))
 
     async def get_contract_document(self, document_id: str) -> dict[str, Any] | None:
-        value = await self._get(f"/api/contract-documents/{document_id}")
+        value = await self._get(f"/api/contract-documents/{document_id}", {"include_content": True})
         return value if isinstance(value, dict) else None
 
     async def get_policy(self, policy_id: str) -> dict[str, Any] | None:
-        value = await self._get(f"/api/policies/{policy_id}")
+        value = await self._get(f"/api/policies/{policy_id}", {"include_content": True})
         return value if isinstance(value, dict) else None
 
     async def get_runs(self, case_id: str | None = None) -> Any:

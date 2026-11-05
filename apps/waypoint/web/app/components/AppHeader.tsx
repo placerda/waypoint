@@ -165,8 +165,6 @@ const NAV_ITEMS = [
   { to: "/", labelKey: "nav.overview" },
   { to: "/invoices", labelKey: "nav.invoices" },
   { to: "/activity", labelKey: "nav.activity" },
-  { to: "/agent", labelKey: "nav.agent" },
-  { to: "/quality", labelKey: "nav.quality" },
 ] as const;
 
 function UserMenu({

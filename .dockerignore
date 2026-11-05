@@ -1,0 +1,8 @@
+.git
+.azure
+**/.venv
+**/.local-wheels
+**/__pycache__
+**/node_modules
+**/build
+.local-*

@@ -1,0 +1,260 @@
+{
+  "schema_version": "1.0",
+  "suppliers": [
+    {
+      "id": "sup-009",
+      "name": "BluePeak Biologics",
+      "status": "active",
+      "category": "contract_manufacturer",
+      "metadata": {
+        "region": "North America",
+        "specialty": "biologic drug substance manufacturing",
+        "contract_model": "capacity",
+        "invoice_categories": [
+          "reserved capacity",
+          "utilized capacity",
+          "cell culture run",
+          "contamination investigation"
+        ],
+        "reconciliation_focus": [
+          "reserved capacity",
+          "utilized capacity",
+          "minimum fee",
+          "quality deviation"
+        ],
+        "risk_examples": [
+          "unused-capacity fee exceeds minimum rule",
+          "contamination investigation billed despite supplier-caused deviation",
+          "capacity true-up omits prior credit"
+        ]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "wps-quality-release",
+      "name": "Quality Release",
+      "description": "QA release, deviation, hold, and protocol evidence needed before quality charges are paid.",
+      "generated_at": "2026-06-16T00:00:00Z",
+      "source_uri": "data/waypoint/invoice-decisions.json#/wps-quality-release",
+      "metadata": {
+        "decision_count": 5,
+        "source": "ledgerfield"
+      }
+    }
+  ],
+  "invoices": [
+    {
+      "id": "INV-2026-08034",
+      "supplier_id": "sup-009",
+      "scenario_id": "wps-quality-release",
+      "invoice_number": "INV-2026-08034",
+      "invoice_date": "2026-08-03",
+      "due_date": "2026-09-17",
+      "status": "open",
+      "currency": "USD",
+      "total_amount": "985000.00",
+      "html_uri": "data/waypoint/invoices/html/sup-009-inv-2026-08034.html",
+      "pdf_uri": "data/waypoint/invoices/pdf/sup-009-inv-2026-08034.pdf",
+      "metadata": {
+        "supplier_name": "BluePeak Biologics",
+        "generated_at": "2026-06-16T00:00:00Z",
+        "artifact_uri_status": "synthesized",
+        "source_decision_uri": "data/waypoint/invoice-decisions.json#/INV-2026-08034"
+      },
+      "lines": [
+        {
+          "id": "INV-2026-08034-L1",
+          "invoice_id": "INV-2026-08034",
+          "description": "Contamination investigation billed where deviation record indicates supplier-caused contamination",
+          "quantity": "1.00",
+          "unit_price": "111000.00",
+          "amount": "111000.00",
+          "sku": "BP-1026",
+          "purchase_order": "DEV-BP-1026-SUPPLIER",
+          "metadata": {
+            "line_role": "decision_line",
+            "category": "Quality deviation",
+            "source_status": "escalate"
+          }
+        },
+        {
+          "id": "INV-2026-08034-L2",
+          "invoice_id": "INV-2026-08034",
+          "description": "Matched base manufacturing, packaging, quality, or logistics services",
+          "quantity": "1",
+          "unit_price": "874000.00",
+          "amount": "874000.00",
+          "sku": "BASE-SERVICE",
+          "purchase_order": "DEV-BP-1026-SUPPLIER",
+          "metadata": {
+            "line_role": "supporting_matched_line",
+            "reconciliation_state": "matched"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "id": "finding-inv-2026-08034",
+          "invoice_id": "INV-2026-08034",
+          "scenario_id": "wps-quality-release",
+          "category": "quality_deviation",
+          "severity": "high",
+          "status": "escalate",
+          "summary": "Contamination investigation was billed to the sponsor where the deviation record indicates supplier-caused contamination, so the investigation cost is not recoverable and must be escalated.",
+          "overpayment_amount": "111000.00",
+          "evidence_ids": [
+            "ev-inv-2026-08034-01",
+            "ev-inv-2026-08034-02"
+          ],
+          "contract_document_ids": [
+            "contract-sup-009-bluepeak-biologics-capacity-agreement"
+          ],
+          "policy_ids": [
+            "policy-quality-release-billability-policy",
+            "policy-invoice-dispute-and-recovery-procedure"
+          ],
+          "metadata": {
+            "basis_summary": "BluePeak capacity agreement (contamination and deviation costs) + quality release and dispute policies.",
+            "display_category": "Quality deviation",
+            "source_labels": [
+              "deviation record",
+              "capacity agreement"
+            ],
+            "source_decision_uri": "data/waypoint/invoice-decisions.json#/INV-2026-08034"
+          }
+        }
+      ],
+      "evidence": [
+        {
+          "id": "ev-inv-2026-08034-01",
+          "title": "deviation record evidence for INV-2026-08034",
+          "evidence_type": "deviation_record",
+          "invoice_id": "INV-2026-08034",
+          "finding_id": "finding-inv-2026-08034",
+          "uri": "ledgerfield://operational-evidence/INV-2026-08034/deviation_record",
+          "excerpt": "deviation record supports review of: Contamination investigation was billed to the sponsor where the deviation record indicates supplier-caused contamination, so the investigation cost is not recoverable and must be escalated.",
+          "metadata": {
+            "source_label": "deviation record",
+            "supplier_id": "sup-009",
+            "scenario_id": "wps-quality-release"
+          }
+        },
+        {
+          "id": "ev-inv-2026-08034-02",
+          "title": "capacity agreement evidence for INV-2026-08034",
+          "evidence_type": "capacity_agreement",
+          "invoice_id": "INV-2026-08034",
+          "finding_id": "finding-inv-2026-08034",
+          "uri": "ledgerfield://operational-evidence/INV-2026-08034/capacity_agreement",
+          "excerpt": "capacity agreement supports review of: Contamination investigation was billed to the sponsor where the deviation record indicates supplier-caused contamination, so the investigation cost is not recoverable and must be escalated.",
+          "metadata": {
+            "source_label": "capacity agreement",
+            "supplier_id": "sup-009",
+            "scenario_id": "wps-quality-release"
+          }
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "finding-inv-2026-08034",
+      "invoice_id": "INV-2026-08034",
+      "scenario_id": "wps-quality-release",
+      "category": "quality_deviation",
+      "severity": "high",
+      "status": "escalate",
+      "summary": "Contamination investigation was billed to the sponsor where the deviation record indicates supplier-caused contamination, so the investigation cost is not recoverable and must be escalated.",
+      "overpayment_amount": "111000.00",
+      "evidence_ids": [
+        "ev-inv-2026-08034-01",
+        "ev-inv-2026-08034-02"
+      ],
+      "contract_document_ids": [
+        "contract-sup-009-bluepeak-biologics-capacity-agreement"
+      ],
+      "policy_ids": [
+        "policy-quality-release-billability-policy",
+        "policy-invoice-dispute-and-recovery-procedure"
+      ],
+      "metadata": {
+        "basis_summary": "BluePeak capacity agreement (contamination and deviation costs) + quality release and dispute policies.",
+        "display_category": "Quality deviation",
+        "source_labels": [
+          "deviation record",
+          "capacity agreement"
+        ],
+        "source_decision_uri": "data/waypoint/invoice-decisions.json#/INV-2026-08034"
+      }
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-inv-2026-08034-01",
+      "title": "deviation record evidence for INV-2026-08034",
+      "evidence_type": "deviation_record",
+      "invoice_id": "INV-2026-08034",
+      "finding_id": "finding-inv-2026-08034",
+      "uri": "ledgerfield://operational-evidence/INV-2026-08034/deviation_record",
+      "excerpt": "deviation record supports review of: Contamination investigation was billed to the sponsor where the deviation record indicates supplier-caused contamination, so the investigation cost is not recoverable and must be escalated.",
+      "metadata": {
+        "source_label": "deviation record",
+        "supplier_id": "sup-009",
+        "scenario_id": "wps-quality-release"
+      }
+    },
+    {
+      "id": "ev-inv-2026-08034-02",
+      "title": "capacity agreement evidence for INV-2026-08034",
+      "evidence_type": "capacity_agreement",
+      "invoice_id": "INV-2026-08034",
+      "finding_id": "finding-inv-2026-08034",
+      "uri": "ledgerfield://operational-evidence/INV-2026-08034/capacity_agreement",
+      "excerpt": "capacity agreement supports review of: Contamination investigation was billed to the sponsor where the deviation record indicates supplier-caused contamination, so the investigation cost is not recoverable and must be escalated.",
+      "metadata": {
+        "source_label": "capacity agreement",
+        "supplier_id": "sup-009",
+        "scenario_id": "wps-quality-release"
+      }
+    }
+  ],
+  "contract_documents": [
+    {
+      "id": "contract-sup-009-bluepeak-biologics-capacity-agreement",
+      "supplier_id": "sup-009",
+      "title": "Capacity Reservation Agreement: BluePeak Biologics",
+      "document_type": "contract",
+      "effective_date": "2026-01-01",
+      "uri": "data/contracts/source-markdown/sup-009-bluepeak-biologics-capacity-agreement.md",
+      "metadata": {
+        "source_format": "markdown",
+        "generated_docx_uri": "data/contracts/docx/sup-009-bluepeak-biologics-capacity-agreement.docx"
+      }
+    }
+  ],
+  "policies": [
+    {
+      "id": "policy-invoice-dispute-and-recovery-procedure",
+      "name": "Invoice Dispute and Recovery Procedure",
+      "description": "Ledgerfield policy evidence source generated from invoice-dispute-and-recovery-procedure.md.",
+      "severity": "medium",
+      "metadata": {
+        "uri": "data/policies/source-markdown/invoice-dispute-and-recovery-procedure.md",
+        "source_format": "markdown",
+        "generated_docx_uri": "data/policies/docx/invoice-dispute-and-recovery-procedure.docx"
+      }
+    },
+    {
+      "id": "policy-quality-release-billability-policy",
+      "name": "Quality Release and Billability Policy",
+      "description": "Ledgerfield policy evidence source generated from quality-release-billability-policy.md.",
+      "severity": "medium",
+      "metadata": {
+        "uri": "data/policies/source-markdown/quality-release-billability-policy.md",
+        "source_format": "markdown",
+        "generated_docx_uri": "data/policies/docx/quality-release-billability-policy.docx"
+      }
+    }
+  ]
+}

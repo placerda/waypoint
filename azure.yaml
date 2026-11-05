@@ -1,189 +1,56 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
-name: ai-foundry-starter-basic
-
+# MODIFY mode: native Agent Landing Zone owns foundation provision and deployment.
+# apphost.cs remains the upstream local-development orchestrator; do not provision it.
+name: caldova-waypoint
 services:
-  contract-expert:
-    project: modules/agents/contract-expert
-    host: azure.ai.agent
-    language: python
-    kind: hosted
-    name: contract-expert
-    description: Prompt-grounded Contract Expert demo agent serving Foundry Responses.
-    codeConfiguration:
-      runtime: python_3_13
-      entryPoint: main.py
-      dependencyResolution: remote_build
-    environmentVariables:
-      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
-        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-    protocols:
-      - protocol: responses
-        version: 2.0.0
-
-  contract-policy-expert:
-    project: modules/agents/contract-policy-expert
-    host: azure.ai.agent
-    language: python
-    kind: hosted
-    name: contract-policy-expert
-    description: FoundryIQ-only Contract Policy Expert serving Responses and Teams activity.
-    codeConfiguration:
-      runtime: python_3_13
-      entryPoint: main.py
-      dependencyResolution: remote_build
-    environmentVariables:
-      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
-        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-      - name: TOOLBOX_NAME
-        value: contract-toolbox
-      - name: TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT
-        value: ${TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT}
-    protocols:
-      - protocol: activity
-        version: 2.0.0
-      - protocol: responses
-        version: 2.0.0
-
+  web:
+    project: ./apps/waypoint/web
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      context: .
+  api:
+    project: ./apps/waypoint/api
+    host: containerapp
+    language: docker
+    docker:
+      path: Dockerfile
+      context: .
   contract-agent:
-    project: modules/agents/contract-agent
+    project: ./modules/agents/contract-agent
     host: azure.ai.agent
     language: docker
     kind: hosted
     name: contract-agent
-    description: Full multi-IQ Caldova contract-agent (castia) speaking responses, activity, and invocations from one handler set.
+    description: Private invoice investigation with gateway-only model access.
+    startupCommand: uv run --frozen --no-sync python main.py
     docker:
       remoteBuild: true
     container:
       resources:
-        cpu: "0.5"
-        memory: 1Gi
-    environmentVariables:
-      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
-        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-      - name: TOOLBOX_NAME
-        value: contract-toolbox
-      # Investigative toolbox lane (FoundryIQ contract/policy KB). Version-less
-      # endpoint => always the published default version, so attaching a lane +
-      # republishing needs no agent redeploy. Resolved by castia.
-      - name: TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT
-        value: ${TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT}
+        cpu: "1"
+        memory: "2Gi"
     protocols:
-      - protocol: activity
-        version: 2.0.0
       - protocol: responses
-        version: 2.0.0
-      - protocol: invocations
-        version: 2.0.0
-
-  contracts:
-    project: modules/agents/contracts
-    host: azure.ai.agent
-    language: docker
-    kind: hosted
-    name: contracts
-    displayName: Contracts
-    description: Teams-first contract intake and evidence autopilot for Waypoint.
-    docker:
-      remoteBuild: true
-    container:
-      resources:
-        cpu: "0.5"
-        memory: 1Gi
-    environmentVariables:
-      - name: AZURE_AI_MODEL_DEPLOYMENT_NAME
-        value: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
-      - name: WAYPOINT_API_BASE_URL
-        value: ${WAYPOINT_API_BASE_URL}
-      - name: WAYPOINT_API_SCOPE
-        value: ${WAYPOINT_API_SCOPE}
-      - name: CONTRACTS_INBOX_ADDRESS
-        value: ${CONTRACTS_INBOX_ADDRESS}
-      - name: CONTRACTS_AGENT_BUILD_ID
-        value: ${CONTRACTS_AGENT_BUILD_ID}
-      - name: CONTRACTS_AGENT_DEPLOYMENT_STAGE
-        value: ${CONTRACTS_AGENT_DEPLOYMENT_STAGE}
-      - name: CONTRACTS_LOG_LEVEL
-        value: ${CONTRACTS_LOG_LEVEL}
-      - name: CONTENT_UNDERSTANDING_ENDPOINT
-        value: ${CONTENT_UNDERSTANDING_ENDPOINT}
-      - name: CONTENT_UNDERSTANDING_USE_FOUNDRY_PROJECT
-        value: ${CONTENT_UNDERSTANDING_USE_FOUNDRY_PROJECT}
-      - name: CONTENT_UNDERSTANDING_API_VERSION
-        value: ${CONTENT_UNDERSTANDING_API_VERSION}
-      - name: CONTENT_UNDERSTANDING_ANALYZER_ID
-        value: ${CONTENT_UNDERSTANDING_ANALYZER_ID}
-      - name: CONTENT_UNDERSTANDING_COMPLETION_DEPLOYMENT
-        value: ${CONTENT_UNDERSTANDING_COMPLETION_DEPLOYMENT}
-      - name: CONTENT_UNDERSTANDING_EMBEDDING_DEPLOYMENT
-        value: ${CONTENT_UNDERSTANDING_EMBEDDING_DEPLOYMENT}
-      - name: CONTENT_UNDERSTANDING_SCOPE
-        value: ${CONTENT_UNDERSTANDING_SCOPE}
-      - name: CONTRACTS_REPORTS_PUBLISH_MODE
-        value: ${CONTRACTS_REPORTS_PUBLISH_MODE}
-      - name: CONTRACTS_REPORTS_DRIVE_ID
-        value: ${CONTRACTS_REPORTS_DRIVE_ID}
-      - name: CONTRACTS_REPORTS_FOLDER_ITEM_ID
-        value: ${CONTRACTS_REPORTS_FOLDER_ITEM_ID}
-      - name: CONTRACTS_REPORTS_SCOPE
-        value: ${CONTRACTS_REPORTS_SCOPE}
-      - name: CONTRACTS_REPORTS_LINK_TYPE
-        value: ${CONTRACTS_REPORTS_LINK_TYPE}
-      - name: CONTRACTS_REPORTS_LINK_SCOPE
-        value: ${CONTRACTS_REPORTS_LINK_SCOPE}
-      - name: CONTRACTS_REPORTS_GRAPH_BASE_URL
-        value: ${CONTRACTS_REPORTS_GRAPH_BASE_URL}
-      - name: TOOLBOX_NAME
-        value: contract-toolbox
-      - name: TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT
-        value: ${TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT}
-      - name: CONTRACTS_FOUNDRY_AGENT_VERSION
-        value: ${AGENT_CONTRACTS_VERSION}
-      - name: CONTRACTS_FOUNDRY_AGENT_ENDPOINT
-        value: ${AGENT_CONTRACTS_ENDPOINT}
-      - name: CONTRACTS_FOUNDRY_PROJECT_ENDPOINT
-        value: ${AGENT_CONTRACTS_PROJECT_ENDPOINT}
-      - name: CONTRACTS_M365_APP_VERSION
-        value: "1.0.7"
-    protocols:
-      - protocol: activity
-        version: 2.0.0
-      - protocol: responses
-        version: 2.0.0
-      - protocol: invocations
-        version: 2.0.0
-    activity:
-      digitalWorkerType: m365
-      publish:
-        publishScope: tenant
-        canRespondWithoutMention: true
-        appVersion: 1.0.7
-        agentDisplayName: Contracts
-        shortDescription: Contract intake autopilot for mailbox-driven contract review.
-        fullDescription: >
-          Contracts monitors the contracts inbox, registers contract artifacts,
-          drafts review briefs, and writes approved reports to SharePoint for
-          Caldova's Waypoint contract operations.
-        developerName: Caldova
-        developerWebsiteUrl: https://github.com/caldova/waypoint
-        privacyUrl: https://github.com/caldova/waypoint/blob/main/SECURITY.md
-        termsOfUseUrl: https://github.com/caldova/waypoint/blob/main/LICENSE
-        optionalPermissionScopes:
-          - resourceAppId: 00000003-0000-0000-c000-000000000000
-            scopes:
-              - Mail.Read
-              - Mail.Send
-              - Files.ReadWrite
-        agenticUserTemplate:
-          id: digitalWorkerTemplate
-          file: agenticUserTemplateManifest.json
-          schemaVersion: 0.1.0-preview
-          communicationProtocol: activityProtocol
-infra:
-  provider: bicep
-  path: ./infra
-
+        version: "2.0.0"
+    env:
+      FOUNDRY_PROJECT_ENDPOINT: ${FOUNDRY_PROJECT_ENDPOINT}
+      AZURE_AI_MODEL_DEPLOYMENT_NAME: ${AZURE_AI_MODEL_DEPLOYMENT_NAME}
+      WAYPOINT_GATEWAY_BASE_URL: ${WAYPOINT_GATEWAY_BASE_URL}
+      WAYPOINT_GATEWAY_SCOPE: ${WAYPOINT_GATEWAY_SCOPE}
+      WAYPOINT_API_BASE_URL: ${WAYPOINT_API_BASE_URL}
+      WAYPOINT_API_SCOPE: ${WAYPOINT_API_SCOPE}
+      TOOLBOX_NAME: contract-toolbox
+      TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT: ${TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT}
+      WAYPOINT_KB_TOOL_NAME: ${WAYPOINT_KB_TOOL_NAME}
+      WAYPOINT_KB_MCP_ENDPOINT: ${WAYPOINT_KB_MCP_ENDPOINT}
+      WAYPOINT_FOUNDRYIQ_RETRIEVAL_MODE: minimal-extractive
+      WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED: ${WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED}
+      MODEL_REASONING_EFFORT: low
+      OTEL_EXPERIMENTAL_RESOURCE_DETECTORS: ""
+      APPLICATIONINSIGHTS_STATSBEAT_DISABLED_ALL: "true"
 requiredVersions:
   azd: ">=1.31.2"
   extensions:
-    # the azd ai agent extension is required for this template
-    "azure.ai.agents": ">=1.0.0-beta.13"
+    azure.ai.agents: ">=1.0.0-beta.13"

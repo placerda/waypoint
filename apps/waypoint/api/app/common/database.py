@@ -30,6 +30,9 @@ async def get_waypoint_repository(
 async def get_waypoint_repository_for_settings(settings: Settings) -> "WaypointRepository":
     """Return a singleton repository for the current database configuration."""
 
+    if settings.require_postgres and not settings.database_connection:
+        raise ValueError("APP_DATABASE_CONNECTION is required; in-memory fallback is disabled")
+
     from ..modules.records.service import WaypointService
     from .repository import InMemoryWaypointRepository, PostgresWaypointRepository
 
@@ -39,7 +42,7 @@ async def get_waypoint_repository_for_settings(settings: Settings) -> "WaypointR
         f"{settings.database_bootstrap_connection}|"
         f"{settings.ledgerfield_seed_path}|"
         f"{settings.ledgerfield_seed_uri}|"
-        f"{settings.default_seed_enabled}"
+        f"{settings.default_seed_enabled}|{settings.seed_required}"
     )
     if _repository is not None and _repository_connection == repository_key:
         return _repository
@@ -153,6 +156,8 @@ async def _import_configured_seed(
     try:
         seed_text = _load_configured_seed_text(settings)
         if seed_text is None:
+            if settings.seed_required:
+                raise ValueError("A configured seed is required")
             return
 
         from ..modules.records.schemas import LedgerfieldSeedImport
@@ -161,7 +166,9 @@ async def _import_configured_seed(
         seed = LedgerfieldSeedImport.model_validate(json.loads(seed_text))
         result = await service_type(repository).import_ledgerfield_seed(seed)
         logger.info("Imported configured Ledgerfield seed: %s", result.model_dump())
-    except Exception:  # noqa: BLE001 - startup seed import must never crash the API lifespan
+    except Exception:  # noqa: BLE001 - optional legacy seeds remain best-effort
+        if settings.seed_required:
+            raise
         logger.exception(
             "Configured Ledgerfield seed import failed at startup; continuing with existing "
             "database contents. The seed-import deploy job can re-seed via the admin endpoint."

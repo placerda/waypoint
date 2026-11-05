@@ -150,14 +150,14 @@ class ContractDocumentDetail(ContractDocument):
     """Contract document metadata plus resolved document text from the corpus lake."""
 
     text: str | None = None
-    content_source: Literal["onelake", "uri-only"] = "uri-only"
+    content_source: Literal["onelake", "local-corpus", "uri-only"] = "uri-only"
 
 
 class PolicyDetail(Policy):
     """Policy metadata plus resolved document text from the corpus lake."""
 
     text: str | None = None
-    content_source: Literal["onelake", "uri-only"] = "uri-only"
+    content_source: Literal["onelake", "local-corpus", "uri-only"] = "uri-only"
 
 
 class InvoiceDecision(BaseModel):

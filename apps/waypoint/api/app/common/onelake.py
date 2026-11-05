@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from .settings import Settings
 from .tracer import trace_span
@@ -109,6 +110,9 @@ class OneLakeClient:
         self._workspace = settings.onelake_workspace
         self._lakehouse = settings.onelake_lakehouse
         self._corpus_prefix = settings.onelake_corpus_prefix
+        self._local_root = (
+            Path(settings.corpus_local_root).resolve() if settings.corpus_local_root else None
+        )
         self._service_client: object | None = None
         self._unavailable = False
         self._lakehouse_segment: str | None = None
@@ -271,6 +275,13 @@ class OneLakeClient:
     def resolve_document(self, uri: str | None, category: str) -> ResolvedDocument:
         """Resolve a stored document URI to its text content from the corpus lake."""
 
+        if self._local_root is not None:
+            local_path = self._local_path(uri)
+            if local_path is None or not local_path.is_file():
+                return ResolvedDocument(text=None, content_source=SOURCE_URI_ONLY, path=uri)
+            return ResolvedDocument(
+                text=local_path.read_text(encoding="utf-8"), content_source="local-corpus", path=uri
+            )
         path = resolve_corpus_path(uri, category, self._corpus_prefix)
         if path is None or not self.configured:
             return ResolvedDocument(text=None, content_source=SOURCE_URI_ONLY, path=path)
@@ -283,6 +294,13 @@ class OneLakeClient:
     def resolve_document_bytes(self, uri: str | None, category: str) -> ResolvedBytes:
         """Resolve a stored document URI to its raw bytes from the corpus lake."""
 
+        if self._local_root is not None:
+            local_path = self._local_path(uri)
+            if local_path is None or not local_path.is_file():
+                return ResolvedBytes(data=None, content_source=SOURCE_URI_ONLY, path=uri)
+            return ResolvedBytes(
+                data=local_path.read_bytes(), content_source="local-corpus", path=uri
+            )
         path = resolve_corpus_path(uri, category, self._corpus_prefix)
         if path is None or not self.configured:
             return ResolvedBytes(data=None, content_source=SOURCE_URI_ONLY, path=path)
@@ -292,8 +310,19 @@ class OneLakeClient:
             return ResolvedBytes(data=None, content_source=SOURCE_URI_ONLY, path=path)
         return ResolvedBytes(data=data, content_source=SOURCE_ONELAKE, path=path)
 
+    def _local_path(self, uri: str | None) -> Path | None:
+        if not uri or self._local_root is None or "://" in uri:
+            return None
+        relative = Path(uri)
+        if relative.is_absolute() or relative.parts[:1] != ("data",):
+            return None
+        path = (self._local_root / relative).resolve()
+        if not path.is_relative_to(self._local_root / "data"):
+            return None
+        return path
 
-_client_cache: dict[tuple[str, str, str, str], OneLakeClient] = {}
+
+_client_cache: dict[tuple[str, str, str, str, str], OneLakeClient] = {}
 
 
 def get_onelake_client(settings: Settings) -> OneLakeClient:
@@ -304,6 +333,7 @@ def get_onelake_client(settings: Settings) -> OneLakeClient:
         settings.onelake_workspace,
         settings.onelake_lakehouse,
         settings.onelake_corpus_prefix,
+        settings.corpus_local_root,
     )
     client = _client_cache.get(cache_key)
     if client is None:

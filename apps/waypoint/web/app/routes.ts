@@ -15,9 +15,7 @@ function pages(locale?: string): RouteConfigEntry[] {
   return [
     index("routes/home.tsx", id("home")),
     route("login", "routes/login.tsx", id("login")),
-    route("agent", "routes/agent.tsx", id("agent")),
     route("activity", "routes/activity.tsx", id("activity")),
-    route("quality", "routes/quality.tsx", id("quality")),
     route("invoices", "routes/invoices.tsx", id("invoices")),
   ];
 }

@@ -643,13 +643,6 @@ function RunCard({
               {formatMoney(meta.money_at_risk, fmt)}
             </span>
           ) : null}
-          <Link
-            to={localize("/agent")}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 max-md:min-h-11 max-md:px-3"
-          >
-            {t("run.details")}
-            <HiOutlineExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
           {traceLink ? (
             <a
               href={traceLink}

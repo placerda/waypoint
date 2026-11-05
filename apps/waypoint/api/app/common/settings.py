@@ -32,6 +32,18 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL/HorizonDB-compatible connection string",
     )
+    require_postgres: bool = Field(
+        default=False,
+        description="Fail closed instead of silently using ephemeral in-memory persistence",
+    )
+    corpus_local_root: str = Field(
+        default="",
+        description="Read-only root containing the bundled native synthetic data/ corpus",
+    )
+    seed_required: bool = Field(
+        default=False,
+        description="Fail startup when the explicitly configured synthetic seed cannot be loaded",
+    )
     database_bootstrap_connection: str = Field(
         default="",
         description=(
@@ -53,10 +65,14 @@ class Settings(BaseSettings):
     )
     database_pool_min_size: int = Field(
         default=1,
+        ge=1,
+        le=4,
         description="Minimum PostgreSQL connection pool size per API process",
     )
     database_pool_max_size: int = Field(
-        default=10,
+        default=4,
+        ge=1,
+        le=4,
         description="Maximum PostgreSQL connection pool size per API process",
     )
     ledgerfield_seed_path: str = Field(

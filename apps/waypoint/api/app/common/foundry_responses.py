@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 from azure.core.exceptions import AzureError
 from azure.identity import DefaultAzureCredential
+from opentelemetry.propagate import inject
 
 AI_SCOPE = "https://ai.azure.com/.default"
 FOUNDRY_FEATURES = "HostedAgents=V1Preview,AgentEndpoints=V1Preview"
@@ -58,17 +59,19 @@ class FoundryResponsesClient:
                 "/endpoint/protocols/openai/responses"
                 f"?api-version={quote(self.api_version, safe='')}"
             )
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Foundry-Features": FOUNDRY_FEATURES,
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+            inject(headers)
             request = urllib.request.Request(
                 endpoint,
                 data=json.dumps({"input": prompt, "store": True, "background": True}).encode(
                     "utf-8"
                 ),
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Foundry-Features": FOUNDRY_FEATURES,
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                },
+                headers=headers,
                 method="POST",
             )
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:

@@ -22,7 +22,7 @@ RUN npm run build
 # Stage 4: Production runtime
 FROM node:22-slim
 COPY ./package.json package-lock.json /app/
-COPY ./server.js /app/
+COPY ./server.js ./private-config.js /app/
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 COPY --from=build-env /app/build /app/build
 WORKDIR /app

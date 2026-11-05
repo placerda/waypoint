@@ -4,3 +4,9 @@ __pycache__/
 .env
 .git/
 .pytest_cache/
+.local-wheels/
+.castia.whl
+.env.*
+!.env.example
+*.pem
+*.key

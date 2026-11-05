@@ -72,9 +72,6 @@ class _WaypointWriter(_WaypointClient):
         headers["Content-Type"] = "application/json"
         async with httpx.AsyncClient(timeout=30.0, verify=self._verify) as client:
             response = await client.request(method, self._url(path), headers=headers, json=body)
-        # A run PATCH route may not be deployed on an older API — degrade to no-op.
-        if method == "PATCH" and response.status_code in {404, 405}:
-            return None
         if response.is_error:
             raise RuntimeError(f"Waypoint {method} {path} failed with HTTP {response.status_code}: {response.text[:300]}")
         return response.json() if response.content else None
@@ -309,6 +306,8 @@ async def _record_assurance_impl(activity: Any, *, result_json: str) -> dict[str
             metadata={"waypoint_run_id": run_id, "invoice_number": invoice_number, "decision_governance": decision_governance},
         )
         correlation["waypoint_recommendation_id"] = _id(recommendation)
+        if correlation["waypoint_recommendation_id"] is None:
+            raise RuntimeError("Waypoint create_recommendation response did not include an id.")
 
         draft = result.get("draft")
         if isinstance(draft, dict) and draft.get("body"):
@@ -323,9 +322,9 @@ async def _record_assurance_impl(activity: Any, *, result_json: str) -> dict[str
         final = await writer.update_run(run_id, status="completed", summary=run_summary, metadata={
             **run_metadata, "waypoint_recommendation_id": correlation["waypoint_recommendation_id"], "waypoint_draft_id": correlation["waypoint_draft_id"],
         })
-        # A run PATCH route absent on an older API degrades to None — say so rather
-        # than reporting a completed run the server never actually closed.
-        correlation["run_finalized"] = final is not None
+        if _id(final) != run_id or final.get("status") != "completed":
+            raise RuntimeError("Waypoint did not acknowledge the completed run.")
+        correlation["run_finalized"] = True
     except Exception as exc:  # noqa: BLE001 - surface a structured error to the model
         if run_id is not None:
             try:

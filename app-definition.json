@@ -1,0 +1,77 @@
+{
+  "$schema": "https://aka.ms/agent-lz/contracts/app-definition-v1.schema.json",
+  "schemaVersion": 1,
+  "id": "caldova-waypoint",
+  "displayName": "Caldova Waypoint",
+  "components": [
+    {
+      "name": "web",
+      "kind": "containerapp",
+      "path": "apps/waypoint/web",
+      "source": {"commit": "f98794cada07fe036ed67004e7ea8381c0aae870"},
+      "ingress": "external",
+      "profiles": [],
+      "resources": {"cpu": 0.5, "memory": "1.0Gi"},
+      "settings": [
+        {"key": "PORT", "value": "3000"},
+        {"key": "NODE_ENV", "value": "production"},
+        {"key": "API_ENDPOINT_HTTP"},
+        {"key": "WAYPOINT_MSAL_ENABLED", "value": true},
+        {"key": "WAYPOINT_MSAL_TENANT_ID"},
+        {"key": "WAYPOINT_MSAL_CLIENT_ID"},
+        {"key": "WAYPOINT_MSAL_API_SCOPE"},
+        {"key": "WAYPOINT_MSAL_REDIRECT_URI"}
+      ]
+    },
+    {
+      "name": "api",
+      "kind": "containerapp",
+      "path": "apps/waypoint/api",
+      "source": {"commit": "f98794cada07fe036ed67004e7ea8381c0aae870"},
+      "ingress": "external",
+      "profiles": ["secret-reader"],
+      "resources": {"cpu": 0.5, "memory": "1.0Gi"},
+      "settings": [
+        {"key": "APP_DATABASE_CONNECTION", "secret": true},
+        {"key": "APP_REQUIRE_POSTGRES", "value": true},
+        {"key": "APP_DATABASE_POOL_MIN_SIZE", "value": 1},
+        {"key": "APP_DATABASE_POOL_MAX_SIZE", "value": 4},
+        {"key": "APP_RUN_STARTUP_DATABASE_BOOTSTRAP", "value": false},
+        {"key": "APP_DEFAULT_SEED_ENABLED", "value": false},
+        {"key": "APP_SEED_REQUIRED", "value": true},
+        {"key": "APP_LEDGERFIELD_SEED_PATH", "value": "/app/corpus/data/waypoint/waypoint-seed.json"},
+        {"key": "APP_CORPUS_LOCAL_ROOT", "value": "/app/corpus"},
+        {"key": "APP_MSAL_BEARER_VALIDATION_ENABLED", "value": true},
+        {"key": "APP_LOCAL_AUTH_ENABLED", "value": false},
+        {"key": "APP_API_KEY_AUTH_ENABLED", "value": false},
+        {"key": "APP_MSAL_TENANT_ID"},
+        {"key": "APP_MSAL_CLIENT_ID"},
+        {"key": "APP_MSAL_REQUIRED_SCOPE", "value": "user_impersonation"},
+        {"key": "APP_MSAL_ALLOWED_APP_IDS"},
+        {"key": "APP_FOUNDRY_ENDPOINT"},
+        {"key": "APP_FOUNDRY_ORCHESTRATOR_AGENT_NAME", "value": "contract-agent"},
+        {"key": "APP_CORS_ALLOWED_ORIGINS"}
+      ]
+    },
+    {
+      "name": "contract-agent",
+      "kind": "azure.ai.agent",
+      "path": "modules/agents/contract-agent",
+      "source": {"commit": "f98794cada07fe036ed67004e7ea8381c0aae870"},
+      "profiles": [],
+      "settings": [
+        {"key": "FOUNDRY_PROJECT_ENDPOINT"},
+        {"key": "AZURE_AI_MODEL_DEPLOYMENT_NAME"},
+        {"key": "WAYPOINT_GATEWAY_BASE_URL"},
+        {"key": "WAYPOINT_GATEWAY_SCOPE"},
+        {"key": "WAYPOINT_API_BASE_URL"},
+        {"key": "WAYPOINT_API_SCOPE"},
+        {"key": "TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT"},
+        {"key": "WAYPOINT_KB_TOOL_NAME"},
+        {"key": "WAYPOINT_KB_MCP_ENDPOINT"},
+        {"key": "WAYPOINT_FOUNDRYIQ_RETRIEVAL_MODE", "value": "minimal-extractive"},
+        {"key": "WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED", "value": false}
+      ]
+    }
+  ]
+}

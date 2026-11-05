@@ -1,50 +1,39 @@
 # contract-agent
 
-The full Caldova invoice-assurance workhorse, built on
-[`castia`](https://github.com/sethjuarez/castia). It owns multi-IQ evidence
-gathering, workflow orchestration, and the sole governed write path into
-Waypoint.
+The bounded invoice-investigation agent uses **Castia 0.7.7**, not MAF.
+Only the Foundry `responses` protocol is exposed. Structured evidence comes
+from the private Waypoint API; the only mutating tool is `record_assurance`.
+It creates cases, runs, recommendations and optional drafts, never payments.
 
-## Protocols
+`gateway.py` isolates the pinned Castia model initialization seam. The inherited
+tool loop, plain Responses calls and streaming all use its managed-auth APIM
+transport. `FOUNDRY_PROJECT_ENDPOINT` remains a real **agent project endpoint**;
+`WAYPOINT_GATEWAY_BASE_URL` is a distinct APIM `/openai/v1/` endpoint. There is
+no direct-model fallback. Native Responses usage and MCP specs are preserved.
 
-One handler set in `main.py` serves all three Foundry wire protocols:
+No optimizer config resolver is used: instructions are loaded explicitly from
+`.agent_configs/baseline/instructions.md`, and the selected model deployment
+must be supplied through the environment. Historical sibling agents, optimizer
+datasets and corpus remain in the fork but are not selected by `azure.yaml`.
 
-| Protocol | Handler | Surface |
-| --- | --- | --- |
-| `responses` | `assurance` | App-triggered invoice-assurance runs (critical path). |
-| `activity` | `ask` | Teams / AI Teammate Q&A and status (Adaptive Cards later). |
-| `invocations` | `invoked` | Callable as a Foundry tool / agent-to-agent. |
+Copy `.env.example` to an ignored local `.env`, supply the environment
+interfaces in [the application guide](../../../docs/private-invoice-application.md),
+then run:
 
-## Responsibilities
-
-Evidence gathering, analyst Q&A/status, assurance runs, and governed writeback
-all happen in one Castia app. The live FoundryIQ lane attaches through Castia's
-server-side toolbox MCP spec; Waypoint API tools provide structured
-status/evidence and the centralized `record_assurance` writer is the only
-mutating capability.
-
-Use the smaller sibling agents for narrower story/eval targets:
-
-- `contract-expert` — prompt-grounded demo expert with no IQ tools.
-- `contract-policy-expert` — FoundryIQ-only Teams/Q&A expert.
-
-## Local development
-
-```bash
-cd modules/agents
-uv sync
-cd contract-agent
-..\.venv\Scripts\python.exe main.py
+```powershell
+uv sync --frozen
+uv run --frozen python -m unittest discover -s tests -v
+uv run --frozen python main.py
 ```
 
-Model and instructions resolve from `.agent_configs/baseline/` via castia's
-`configured_model()`, so the Foundry Agent Optimizer can tune the prompt with no
-code change. Without that config it degrades to environment defaults.
+The approved FoundryIQ lane is native GA `2026-04-01` minimal/extractive MCP,
+with no KB models, query planning or answer synthesis. Castia performs reasoning
+and synthesis through APIM. MCP inputs follow the server-discovered schema,
+not an assumed REST `messages` payload. Source grounding records and citations
+remain available; automatic KB-side decomposition is intentionally absent.
 
-## Lifecycle (castia)
-
-```bash
-python -m castia eval check     # offline eval-suite gate
-python -m castia optimize --check   # tool baseline drift gate
-python -m castia deploy         # reconcile azure.yaml protocols from decorators
-```
+The lane fails closed until actual private server-side MCP retrieval, published
+tool schema, citations and model-free configuration are verified. The native
+upstream MCP URL is an explicit routing assertion, not proof that the project
+toolbox connection matches it. Inspect that connection during acceptance.
+A plain model-call test or setting a boolean is not compatibility evidence.

@@ -13,6 +13,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.local-*
+**/.local-wheels/
+.castia.whl
 venv/
 env/
 
@@ -29,6 +32,7 @@ build/
 
 # azd project state and provision/deploy logs
 .azure/
+.artifacts/
 provision*.log
 deploy*.log
 

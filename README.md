@@ -18,6 +18,12 @@
 
 <h1 align="center">Waypoint</h1>
 
+> **Private bounded deployment:** this fork's root `azure.yaml` selects only
+> Web, FastAPI and the Castia invoice agent through the native Agent Landing
+> Zone BYO mechanism. See [the application guide](docs/private-invoice-application.md)
+> before deploying; the upstream fleet/Aspire deployment links below are not
+> the deployment path for this adaptation.
+
 <p align="center">
   <strong>
     One repo. One Azure deployment. One live, contract-grounded story.
