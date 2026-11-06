@@ -8,7 +8,7 @@
       "name": "web",
       "kind": "containerapp",
       "path": "apps/waypoint/web",
-      "source": {"commit": "1d545ceafb18ded987a8f3dcf84602d445aadfaa"},
+      "source": {"commit": "b86d8dff363b95fb4e79579bcd99d80c3e1cadac"},
       "ingress": "external",
       "profiles": [],
       "resources": {"cpu": 0.5, "memory": "1.0Gi"},
