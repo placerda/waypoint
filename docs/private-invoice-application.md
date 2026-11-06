@@ -320,6 +320,12 @@ The deployment must not override it. The validation receipt records the expected
 foundation telemetry resource ID and connection hash, never its connection string.
 That expected binding is not proof of the runtime-injected value or ingestion.
 
+The read-only evidence tool returns the retrieved invoice's amount, currency
+and line items together with finding summaries and operational evidence excerpts.
+It preserves the API's monetary representations and leaves missing financial
+fields null. Only explicit business fields are forwarded, not arbitrary metadata.
+These records complement native contract and policy retrieval, not replace it.
+
 Mocked tests prove client serialization and continuation preservation,
 not private-service compatibility. Before setting the candidate-route gate
 `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=true`, independently verify:

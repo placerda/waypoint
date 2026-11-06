@@ -143,6 +143,7 @@ async def _gather_evidence_impl(activity: Any, *, invoice_id: str = "") -> dict[
     canonical = str(detail.get("id") or invoice_id)
     invoice_number = str(detail.get("invoice_number") or canonical)
     findings = await client.list_findings(canonical) or _as_list(detail.get("findings"))
+    references = await client.list_evidence(canonical)
 
     # Normalize findings so the model weighs real severity/status, not just docs.
     finding_view = [
@@ -152,6 +153,9 @@ async def _gather_evidence_impl(activity: Any, *, invoice_id: str = "") -> dict[
             "severity": str(f.get("severity") or "").strip().lower(),
             "status": str(f.get("status") or "").strip().lower(),
             "overpayment_amount": _float(f.get("overpayment_amount")),
+            "summary": f.get("summary"),
+            "basis_summary": f.get("basis_summary"),
+            "evidence_ids": _str_list(f.get("evidence_ids")),
         }
         for f in findings
     ]
@@ -218,7 +222,34 @@ async def _gather_evidence_impl(activity: Any, *, invoice_id: str = "") -> dict[
         summary = "No governing contract or policy references found for this invoice."
     payload = _evidence(canonical, evidence, summary, status)
     payload["invoice_number"] = invoice_number
+    payload["invoice"] = {
+        key: detail.get(key)
+        for key in (
+            "id", "invoice_number", "supplier_id", "invoice_date", "due_date",
+            "status", "currency", "total_amount",
+        )
+    }
+    payload["invoice"]["lines"] = [
+        {
+            key: line.get(key)
+            for key in (
+                "id", "invoice_id", "description", "quantity", "unit_price",
+                "amount", "sku", "purchase_order",
+            )
+        }
+        for line in _as_list(detail.get("lines"))
+    ]
     payload["findings"] = finding_view
+    payload["evidence_references"] = [
+        {
+            key: reference.get(key)
+            for key in (
+                "id", "title", "evidence_type", "invoice_id", "finding_id",
+                "uri", "excerpt",
+            )
+        }
+        for reference in references
+    ]
     payload["unresolved_sources"] = unresolved
     return payload
 
@@ -260,9 +291,10 @@ def read_tools() -> list[Tool]:
             name="gather_evidence",
             description=(
                 "Retrieve grounded contract and policy evidence for an invoice under "
-                "assurance review. Resolves the invoice in the Waypoint corpus, reads "
-                "its reconciliation findings, and returns the governing contract "
-                "documents and policies with source references. Call this before "
+                "assurance review. Returns the invoice record with its amount, "
+                "currency and lines, reconciliation findings, operational evidence "
+                "excerpts, and governing contract/policy references. Missing invoice "
+                "fields remain null, not zero. Call this before "
                 "deciding — never invent evidence; if none is found, say so."
             ),
             parameters={

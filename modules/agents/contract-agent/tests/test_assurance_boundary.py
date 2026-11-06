@@ -5,13 +5,13 @@ import os
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import httpx
 
-from tools import _WaypointClient
+from tools import _gather_evidence_impl, _WaypointClient
 from write_tools import _record_assurance_impl, _WaypointWriter, write_tools
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -20,6 +20,37 @@ ENV = {
     "WAYPOINT_API_BASE_URL": "https://private-api.example.org",
     "WAYPOINT_API_SCOPE": "api://waypoint/.default",
 }
+
+
+class InvoiceEvidenceTests(unittest.IsolatedAsyncioTestCase):
+    async def gather(self, invoice):
+        seed = json.loads(SEED.read_text(encoding="utf-8"))
+        with patch.dict(os.environ, ENV), \
+                patch.object(_WaypointClient, "resolve_invoice", AsyncMock(return_value=invoice)), \
+                patch.object(_WaypointClient, "list_findings", AsyncMock(return_value=seed["findings"])), \
+                patch.object(_WaypointClient, "list_evidence", AsyncMock(return_value=seed["evidence"])), \
+                patch.object(_WaypointClient, "get_contract_document", AsyncMock(return_value={"title": "Agreement"})), \
+                patch.object(_WaypointClient, "get_policy", AsyncMock(return_value={"name": "Policy"})):
+            return await _gather_evidence_impl(None, invoice_id="INV-2026-08034")
+
+    async def test_invoice_money_lines_and_operational_evidence_reach_the_model(self):
+        invoice = json.loads(SEED.read_text(encoding="utf-8"))["invoices"][0]
+        result = await self.gather(invoice)
+        self.assertEqual(result["invoice"]["total_amount"], "985000.00")
+        self.assertEqual(result["invoice"]["currency"], "USD")
+        self.assertEqual(result["invoice"]["lines"][0]["amount"], "111000.00")
+        self.assertEqual(result["invoice"]["lines"][1]["amount"], "874000.00")
+        self.assertIn("supplier-caused", result["findings"][0]["summary"])
+        self.assertIn("supplier-caused", result["evidence_references"][0]["excerpt"])
+        self.assertEqual(result["evidence_references"][0]["id"], "ev-inv-2026-08034-01")
+        self.assertNotIn("metadata", json.dumps(result))
+        self.assertNotIn("html_uri", result["invoice"])
+
+    async def test_missing_financial_fields_do_not_become_zero_or_usd(self):
+        result = await self.gather({"id": "INV-2026-08034"})
+        self.assertIsNone(result["invoice"]["total_amount"])
+        self.assertIsNone(result["invoice"]["currency"])
+        self.assertEqual(result["invoice"]["lines"], [])
 
 
 class AssuranceBoundaryTests(unittest.IsolatedAsyncioTestCase):
