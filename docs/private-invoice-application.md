@@ -315,6 +315,11 @@ through the application log handler. Re-exporting the exporter's own errors
 creates a feedback loop that can prevent the framework's end-of-turn flush
 from finishing. Application logs and trace exporters remain enabled.
 
+The deployment resolves the existing foundation App Insights connection string
+at publication time and passes it through the agent environment. The validation
+receipt binds its resource ID and SHA-256, never the connection string itself.
+No connection string is committed to the application manifest or YAML.
+
 Mocked tests prove client serialization and continuation preservation,
 not private-service compatibility. Before setting the candidate-route gate
 `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=true`, independently verify:
