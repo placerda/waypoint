@@ -51,6 +51,29 @@ expected behavior and reasons. These are explicit custom evaluators, not
 server-side built-in quality judges. This SDK/manual fallback is used because
 the Azure MCP transport was unavailable. It does not bypass the AI gateway.
 The native run must complete and pass every case before promotion.
+The evaluation service can live in a separately approved, supported private
+region without relocating the application or agent. Configure the
+`CALDOVA_EVALUATION_PROJECT_ENDPOINT` variable in the `caldova-private` GitHub
+environment. The full-release step passes it explicitly as
+`--evaluation-project`, so an unset or malformed value fails rather than
+silently choosing another project. Local commands without that option retain
+the original project.
+
+Set `CALDOVA_EVALUATION_PRIVATE_ADDRESS` to the verified services.ai private
+endpoint address. The workflow supplies `--evaluation-private-address` so only
+that evaluation hostname is resolved to the approved RFC 1918 address within
+the release process. The original HTTPS hostname, SNI and certificate
+validation remain unchanged. Other destinations use normal resolution, and
+the resolver is restored on success or error. This avoids changing corporate
+DNS, VPN routes or existing private DNS zones for the separate region.
+
+The original project client still creates the explicitly versioned sessions
+and invokes the real candidate. Only the native evaluation definition and run
+use the separate evaluation client. Both projects must remain reachable through
+their approved private network paths and the job identity must have the needed
+resource-scoped access. Receipts and native metadata record both project
+endpoints along with the exact source, image and candidate version. Replaying a
+historical diagnostic in the new region is not current-source quality approval.
 The unrelated Agent Optimizer `eval.yaml` is not executed by this workflow.
 This release uses the dataset and explicit rubric in this directory.
 

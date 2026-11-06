@@ -49,6 +49,100 @@ class ReleaseGates(unittest.TestCase):
             self.assertIn("read-only", row["query"].lower())
             self.assertTrue(row["expected_behavior"])
 
+    def test_evaluation_project_requires_an_explicit_trusted_https_project_url(self):
+        self.assertEqual(release.project_endpoint(release.PROJECT), release.PROJECT)
+        for value in (
+            "", "http://example.services.ai.azure.com/api/projects/test",
+            "https://example.invalid/api/projects/test",
+            "https://example.services.ai.azure.com.evil.invalid/api/projects/test",
+            "https://user@example.services.ai.azure.com/api/projects/test",
+            "https://example.services.ai.azure.com/api/projects/test?token=invalid",
+        ):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                release.project_endpoint(value)
+
+    def test_separate_evaluation_project_cannot_reuse_the_agent_project_client(self):
+        args = SimpleNamespace(
+            candidate=Path("candidate.json"),
+            evaluation_project="https://evaluation.services.ai.azure.com/api/projects/test",
+        )
+        with patch.object(release, "read") as read, self.assertRaisesRegex(
+            RuntimeError, "requires its own project client",
+        ):
+            release.evaluate(args, {}, Mock(), Mock())
+        read.assert_not_called()
+
+    def test_evaluation_route_rejects_non_private_addresses(self):
+        self.assertEqual(release.private_address("10.89.1.6"), "10.89.1.6")
+        for value in ("", "127.0.0.1", "0.0.0.0", "169.254.169.254", "8.8.8.8", "::1"):
+            with self.subTest(value=value), self.assertRaises(argparse.ArgumentTypeError):
+                release.private_address(value)
+
+    def test_evaluation_route_is_scoped_and_restored_after_failure(self):
+        endpoint = "https://evaluation.services.ai.azure.com/api/projects/test"
+        resolver = Mock(return_value=[("private-route",)])
+        with patch.object(release.socket, "getaddrinfo", resolver):
+            with self.assertRaisesRegex(RuntimeError, "Synthetic failure"):
+                with release.evaluation_private_route(endpoint, "10.89.1.6"):
+                    self.assertEqual(
+                        release.socket.getaddrinfo("evaluation.services.ai.azure.com", 443),
+                        [("private-route",)],
+                    )
+                    release.socket.getaddrinfo("original.services.ai.azure.com", 443)
+                    raise RuntimeError("Synthetic failure")
+            self.assertIs(release.socket.getaddrinfo, resolver)
+        self.assertEqual(resolver.call_args_list[0].args, ("10.89.1.6", 443))
+        self.assertEqual(resolver.call_args_list[1].args, ("original.services.ai.azure.com", 443))
+
+    def test_regional_native_grading_keeps_candidate_invocation_in_original_project(self):
+        endpoint = "https://evaluation.services.ai.azure.com/api/projects/test"
+        args = SimpleNamespace(candidate=Path("candidate.json"), evaluation_project=endpoint)
+        agent_client, evaluation_client = Mock(), Mock()
+        native = evaluation_client.get_openai_client.return_value
+        native.evals.create.return_value = SimpleNamespace(id="regional-native-eval")
+        counts = SimpleNamespace(
+            total=3, passed=3, failed=0, errored=0,
+            model_dump=lambda: {"total": 3, "passed": 3, "failed": 0, "errored": 0},
+        )
+        native.evals.runs.create.return_value = SimpleNamespace(
+            id="regional-native-run", status="completed", result_counts=counts,
+            report_url="https://example.invalid/real-test-fixture",
+        )
+        scores = {name: {"score": 4, "reason": "Synthetic offline test."} for name in release.DIMENSIONS}
+        judge = Mock()
+        judge.responses.create.return_value = SimpleNamespace(
+            status="completed", output_text=json.dumps(scores),
+        )
+        context = Mock()
+        context.__enter__ = Mock(return_value=judge)
+        context.__exit__ = Mock(return_value=False)
+        proof = {}
+        credential = Mock()
+        with patch.object(release, "read", return_value=self.candidate()), patch.object(
+            release, "verify_candidate",
+        ), patch.object(
+            release, "invoke",
+            return_value={"response": "Offline answer.", "response_id": "test-response", "session_id": "test-session"},
+        ) as invoke, patch.object(release, "OpenAI", return_value=context), patch.object(
+            release, "get_bearer_token_provider",
+        ), patch.object(release, "active_version", return_value="4"):
+            release.evaluate(args, proof, agent_client, credential, evaluation_client)
+        self.assertEqual(invoke.call_count, 3)
+        for call in invoke.call_args_list:
+            self.assertIs(call.args[0], agent_client)
+            self.assertIs(call.args[1], credential)
+            self.assertEqual(call.args[2], self.candidate()["candidateVersion"])
+        agent_client.get_openai_client.assert_not_called()
+        self.assertEqual(proof["agentProjectEndpoint"], release.PROJECT)
+        self.assertEqual(proof["evaluationProjectEndpoint"], endpoint)
+        self.assertEqual(proof["sourceSha"], self.candidate()["sourceSha"])
+        self.assertEqual(proof["status"], "passed")
+        metadata = native.evals.create.call_args.kwargs["metadata"]
+        self.assertEqual(metadata["agent_project_endpoint"], release.PROJECT)
+        self.assertEqual(metadata["evaluation_project_endpoint"], endpoint)
+        self.assertEqual(metadata["image"], self.candidate()["image"])
+        self.assertEqual(native.evals.runs.create.call_args.args[0], "regional-native-eval")
+
     def test_active_version_rejects_latest_and_missing_pins(self):
         for value in (None, "", "latest", "0"):
             env = [{"name": "APP_FOUNDRY_RESPONSES_API_VERSION", "value": "v1"}]
@@ -427,6 +521,7 @@ class ReleaseGates(unittest.TestCase):
         self.assertIn('--web-build "$PROOF/web-build.json"', workflow)
         self.assertIn("!inputs.source_only", workflow)
         self.assertIn("environment: caldova-private", workflow)
+        self.assertIn('--evaluation-project "$CALDOVA_EVALUATION_PROJECT_ENDPOINT"', workflow)
 
 
 if __name__ == "__main__":

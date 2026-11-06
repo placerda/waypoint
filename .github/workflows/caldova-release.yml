@@ -67,6 +67,8 @@ jobs:
     env:
       RELEASE_PYTHON: .venv-caldova-release/bin/python
       PROOF: .artifacts/caldova-release
+      CALDOVA_EVALUATION_PROJECT_ENDPOINT: ${{ vars.CALDOVA_EVALUATION_PROJECT_ENDPOINT }}
+      CALDOVA_EVALUATION_PRIVATE_ADDRESS: ${{ vars.CALDOVA_EVALUATION_PRIVATE_ADDRESS }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -86,7 +88,7 @@ jobs:
       - name: Create a candidate without moving the active application version
         run: $RELEASE_PYTHON tools/deploy/caldova/release.py candidate --build "$PROOF/build.json" --receipt "$PROOF/candidate.json"
       - name: Run blocking real-agent evaluations through the AI gateway
-        run: $RELEASE_PYTHON tools/deploy/caldova/release.py evaluate --candidate "$PROOF/candidate.json" --receipt "$PROOF/evaluation.json"
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py evaluate --candidate "$PROOF/candidate.json" --evaluation-project "$CALDOVA_EVALUATION_PROJECT_ENDPOINT" --evaluation-private-address "$CALDOVA_EVALUATION_PRIVATE_ADDRESS" --receipt "$PROOF/evaluation.json"
       - name: Build the matching immutable web image only after native approval
         run: $RELEASE_PYTHON tools/deploy/caldova/release.py build --component web --receipt "$PROOF/web-build.json"
       - name: Publish the matching web and promote only the evaluated agent

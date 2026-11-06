@@ -4,18 +4,22 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from hashlib import sha256
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import tarfile
 import tempfile
 import time
+from urllib.parse import urlsplit
 
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import VersionRefIndicator
@@ -212,7 +216,54 @@ def invoke(client, credential, version: str, query: str) -> dict:
     return {"response": text, "response_id": body["id"], "session_id": session.agent_session_id}
 
 
-def evaluate(args, proof: dict, client, credential) -> None:
+def project_endpoint(value: str) -> str:
+    if not re.fullmatch(
+        r"https://[a-z0-9][a-z0-9-]*\.services\.ai\.azure\.com/api/projects/[A-Za-z0-9][A-Za-z0-9_.-]*",
+        value,
+    ):
+        raise argparse.ArgumentTypeError("An explicit HTTPS Foundry project endpoint is required.")
+    return value
+
+
+def private_address(value: str) -> str:
+    try:
+        address = ipaddress.IPv4Address(value)
+    except ipaddress.AddressValueError as error:
+        raise argparse.ArgumentTypeError("A private IPv4 endpoint address is required.") from error
+    if not any(address in ipaddress.IPv4Network(prefix) for prefix in (
+        "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+    )):
+        raise argparse.ArgumentTypeError("The evaluation endpoint must use an RFC 1918 address.")
+    return value
+
+
+@contextmanager
+def evaluation_private_route(endpoint: str, address: str | None):
+    host = urlsplit(project_endpoint(endpoint)).hostname
+    if address is None:
+        yield
+        return
+    address = private_address(address)
+    original = socket.getaddrinfo
+
+    def resolve(name, port, *args, **kwargs):
+        if name == host:
+            if port not in (443, "443"):
+                raise RuntimeError("The private evaluation route supports HTTPS only.")
+            return original(address, port, *args, **kwargs)
+        return original(name, port, *args, **kwargs)
+
+    socket.getaddrinfo = resolve
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
+def evaluate(args, proof: dict, client, credential, evaluation_client=None) -> None:
+    evaluation_project = project_endpoint(getattr(args, "evaluation_project", PROJECT))
+    if evaluation_project != PROJECT and evaluation_client is None:
+        raise RuntimeError("The separate evaluation project requires its own project client.")
     selected = read(args.candidate)
     if selected.get("status") != "candidate":
         raise RuntimeError("A verified candidate is required.")
@@ -224,6 +275,7 @@ def evaluate(args, proof: dict, client, credential) -> None:
         generationSource="manual-fallback",
         generationFallbackReason="Azure MCP was unavailable. Use the installed native project SDK and versioned explicit rubric.",
         scoring="APIM LLM rubric scores with native Foundry Python threshold evaluators",
+        agentProjectEndpoint=PROJECT, evaluationProjectEndpoint=evaluation_project,
         datasetSha256=sha256(Path(__file__).with_name("cases.jsonl").read_bytes()).hexdigest(),
         cases=[],
     )
@@ -240,7 +292,7 @@ def evaluate(args, proof: dict, client, credential) -> None:
             } for name in DIMENSIONS
         },
     }
-    native = client.get_openai_client()
+    native = (evaluation_client if evaluation_client is not None else client).get_openai_client()
     criteria = [
         {
             "type": "python", "name": name, "pass_threshold": 1,
@@ -270,6 +322,8 @@ def evaluate(args, proof: dict, client, credential) -> None:
             "agent_name": AGENT, "agent_version": selected["candidateVersion"],
             "source_sha": selected["sourceSha"], "image": selected["image"],
             "judge_route": "APIM", "judge_model": "gpt-6.1-sol",
+            "agent_project_endpoint": PROJECT,
+            "evaluation_project_endpoint": evaluation_project,
         },
     )
     proof["evaluationId"] = evaluation.id
@@ -394,6 +448,8 @@ def promote(args, proof: dict, client) -> None:
     expected_counts = {"total": 3, "passed": 3, "failed": 0, "errored": 0}
     if (
         quality.get("nativeRunStatus") != "completed"
+        or quality.get("agentProjectEndpoint", PROJECT) != PROJECT
+        or not isinstance(quality.get("evaluationProjectEndpoint", PROJECT), str)
         or "reportUrl" not in quality
         or not isinstance(counts, dict)
         or any(type(counts.get(key)) is not int or counts[key] != value for key, value in expected_counts.items())
@@ -401,6 +457,7 @@ def promote(args, proof: dict, client) -> None:
                for key in ("evaluationId", "evaluationRunId"))
     ):
         raise RuntimeError("Completed native evaluation with all three cases passing is required.")
+    project_endpoint(quality.get("evaluationProjectEndpoint", PROJECT))
     verify_candidate(client, selected)
     if active_version() != selected["previousVersion"]:
         raise RuntimeError("The active baseline changed. Refusing concurrent promotion.")
@@ -466,6 +523,8 @@ def promote(args, proof: dict, client) -> None:
         status="promoted", sourceSha=selected["sourceSha"], image=selected["image"],
         candidateVersion=selected["candidateVersion"], previousVersion=selected["previousVersion"],
         evaluationId=quality["evaluationId"], evaluationRunId=quality["evaluationRunId"],
+        agentProjectEndpoint=PROJECT,
+        evaluationProjectEndpoint=quality.get("evaluationProjectEndpoint", PROJECT),
         reportUrl=quality["reportUrl"],
     )
 
@@ -479,6 +538,8 @@ def main() -> None:
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--evaluation", type=Path)
     parser.add_argument("--web-build", type=Path)
+    parser.add_argument("--evaluation-project", type=project_endpoint, default=PROJECT)
+    parser.add_argument("--evaluation-private-address", type=private_address)
     args = parser.parse_args()
     required = {
         "candidate": ("build",), "evaluate": ("candidate",),
@@ -501,7 +562,12 @@ def main() -> None:
                 if args.stage == "candidate":
                     candidate(args, proof, client)
                 elif args.stage == "evaluate":
-                    evaluate(args, proof, client, credential)
+                    with evaluation_private_route(
+                        args.evaluation_project, args.evaluation_private_address,
+                    ), AIProjectClient(
+                        endpoint=args.evaluation_project, credential=credential, allow_preview=True,
+                    ) as evaluation_client:
+                        evaluate(args, proof, client, credential, evaluation_client)
                 else:
                     promote(args, proof, client)
     finally:
