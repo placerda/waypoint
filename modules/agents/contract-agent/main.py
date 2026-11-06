@@ -16,7 +16,8 @@ from tools import read_tools
 from write_tools import write_tools
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("toolbox").setLevel(logging.INFO)
 
 app = Agent(name="contract-agent")
 _instructions = (
