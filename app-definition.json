@@ -63,7 +63,6 @@
       "source": {"commit": "0b922de9fe4601f5b9c53f0cdba38be1e44993de"},
       "profiles": [],
       "settings": [
-        {"key": "APPLICATIONINSIGHTS_CONNECTION_STRING"},
         {"key": "AZURE_AI_MODEL_DEPLOYMENT_NAME"},
         {"key": "WAYPOINT_GATEWAY_BASE_URL"},
         {"key": "WAYPOINT_GATEWAY_SCOPE"},
