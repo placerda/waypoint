@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -14,6 +16,8 @@ from opentelemetry.propagate import inject
 
 from gateway import required_env
 from knowledge import validate_minimal_mcp_endpoint
+
+LOGGER = logging.getLogger(__name__)
 
 
 class NativeToolbox:
@@ -41,8 +45,14 @@ class NativeToolbox:
     async def rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         self.request_id += 1
         request_id = self.request_id
+        LOGGER.info("Native toolbox MCP %s: acquiring agent token", method)
+        try:
+            token = await asyncio.wait_for(toolbox_token(), timeout=30)
+        except TimeoutError:
+            LOGGER.exception("Native toolbox MCP %s: agent token acquisition timed out", method)
+            raise
         headers = {
-            "Authorization": "Bearer " + await toolbox_token(),
+            "Authorization": "Bearer " + token,
             "Accept": "application/json, text/event-stream",
             "Foundry-Features": "Toolboxes=V1Preview",
         }
@@ -52,8 +62,10 @@ class NativeToolbox:
         body: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "params": params}
         if method != "notifications/initialized":
             body["id"] = request_id
+        LOGGER.info("Native toolbox MCP %s: sending authenticated request", method)
         async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
             response = await client.post(self.endpoint, headers=headers, json=body)
+        LOGGER.info("Native toolbox MCP %s: HTTP %s", method, response.status_code)
         response.raise_for_status()
         if response.is_redirect:
             raise RuntimeError("Toolbox redirects are not accepted")

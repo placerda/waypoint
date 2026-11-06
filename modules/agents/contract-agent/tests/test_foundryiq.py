@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -118,6 +119,18 @@ class MinimalFoundryIQTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_native_sse_is_supported(self):
         self.assertIn("content", await self.exercise(sse=True))
+
+    async def test_agent_token_timeout_is_bounded_and_prevents_http(self):
+        with patch.dict(os.environ, CONFIG), patch(
+            "toolbox.toolbox_token", AsyncMock(side_effect=TimeoutError)
+        ), patch("toolbox.asyncio.wait_for", wraps=asyncio.wait_for) as deadline, patch(
+            "toolbox.httpx.AsyncClient"
+        ) as client, self.assertLogs("toolbox", level="ERROR") as logs:
+            with self.assertRaises(TimeoutError):
+                await NativeToolbox().rpc("initialize", {})
+        self.assertEqual(deadline.call_args.kwargs["timeout"], 30)
+        client.assert_not_called()
+        self.assertIn("agent token acquisition timed out", logs.output[0])
 
     async def test_native_errors_fail_closed(self):
         for failure in ("rpc", "tool", "grounding", "http"):
