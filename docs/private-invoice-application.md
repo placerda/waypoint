@@ -305,6 +305,11 @@ The project toolbox token uses the Foundry AI audience; a direct native Search
 MCP client would need the Search audience instead. These tokens are not
 interchangeable, and this adaptation does not silently switch transports.
 
+Native toolbox token acquisition has a 30-second deadline and fails explicitly.
+Runtime logs identify token acquisition, authenticated request dispatch and HTTP
+status without recording tokens or document contents. These stages distinguish
+hosted identity failures from private endpoint access failures.
+
 Mocked tests prove client serialization and continuation preservation,
 not private-service compatibility. Before setting the candidate-route gate
 `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=true`, independently verify:
