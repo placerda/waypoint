@@ -9,13 +9,13 @@
     "pending": "Pendientes",
     "escalations": "Escalamientos",
     "filterToEscalations": "Filtrar por escalamientos",
-    "recoverable": "Recuperable"
+    "atRisk": "En riesgo"
   },
   "summary": {
     "loading": "Cargando las decisiones sobre facturas de proveedores…",
-    "recoverable_one": "{{amount}} recuperable en {{count}} factura revisada",
-    "recoverable_many": "{{amount}} recuperable en {{count}} facturas revisadas",
-    "recoverable_other": "{{amount}} recuperable en {{count}} facturas revisadas",
+    "atRisk_one": "{{amount}} en riesgo en {{count}} factura revisada",
+    "atRisk_many": "{{amount}} en riesgo en {{count}} facturas revisadas",
+    "atRisk_other": "{{amount}} en riesgo en {{count}} facturas revisadas",
     "escalations_one": "{{count}} escalamiento",
     "escalations_many": "{{count}} escalamientos",
     "escalations_other": "{{count}} escalamientos",
@@ -103,7 +103,7 @@
     "title_other": "¿Iniciar el aseguramiento de {{count}} facturas?",
     "close": "Cerrar la confirmación del lote",
     "guidance": "Cada factura recién aceptada inicia una orquestación de agentes hospedados y puede generar costos de uso. Las ejecuciones activas se reutilizan automáticamente. Caldova inicia como máximo {{concurrency}} facturas a la vez y acepta hasta {{max}} por lote.",
-    "currentRecoverable": "Monto recuperable actual",
+    "currentRecoverable": "Monto actual en riesgo",
     "starting": "Iniciando el lote…",
     "start": "Iniciar aseguramiento del lote"
   },

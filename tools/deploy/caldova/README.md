@@ -38,6 +38,12 @@ The native run must complete and pass every case before promotion.
 The unrelated Agent Optimizer `eval.yaml` is not executed by this workflow.
 This release uses the dataset and explicit rubric in this directory.
 
+The invoice register counts the recommendation's referenced evidence records
+when no expert citations were recorded. It does not invent independent experts
+or Foundry IQ provenance. The aggregate shows money at risk for reviewed
+invoices, including escalations, not guaranteed recovery. An agent with no
+recorded expert lanes shows its actual invoice records instead of empty IQ lanes.
+
 Success and failure receipts are retained as Actions artifacts. They identify
 source commit, immutable image, candidate version, native evaluation and report.
 The deployment step rechecks all identifiers and the unchanged active baseline.

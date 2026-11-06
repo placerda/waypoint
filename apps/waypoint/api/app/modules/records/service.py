@@ -299,7 +299,7 @@ class WaypointService:
         latest = recommendations[-1] if recommendations else None
         if latest is None:
             return _AgentAttribution()
-        plane_count, source_count = _expert_evidence_counts(latest.metadata)
+        plane_count, source_count = _expert_evidence_counts(latest.metadata, latest.evidence_ids)
         confidence_calibrated = latest.metadata.get("confidence_calibrated") is True
         return _AgentAttribution(
             has_agent_decision=True,
@@ -615,18 +615,20 @@ def _meaningful_case_title(title: str | None, invoice_number: str) -> str | None
     return stripped
 
 
-def _expert_evidence_counts(metadata: dict[str, object]) -> tuple[int, int]:
+def _expert_evidence_counts(
+    metadata: dict[str, object], evidence_ids: list[str] | None = None
+) -> tuple[int, int]:
     """Count corroborating expert planes and their underlying sources.
 
     Mirrors the per-expert evidence lanes the invoice drawer renders from
     ``recommendation.metadata.expert_evidence`` so the list's source/plane summary agrees
-    with the drawer. Returns ``(plane_count, source_count)``; missing/malformed metadata
-    yields zeros.
+    with the drawer. When no expert citations are recorded, count the recommendation's
+    referenced evidence records without inventing expert planes.
     """
 
     planes = metadata.get("expert_evidence")
     if not isinstance(planes, list):
-        return 0, 0
+        planes = []
     plane_count = 0
     source_count = 0
     for plane in planes:
@@ -636,7 +638,8 @@ def _expert_evidence_counts(metadata: dict[str, object]) -> tuple[int, int]:
         evidence = plane.get("evidence")
         if isinstance(evidence, list):
             source_count += len(evidence)
-    return plane_count, source_count
+    record_count = len({identifier for identifier in evidence_ids or [] if identifier})
+    return plane_count, source_count or record_count
 
 
 def _format_money(amount: Decimal, currency: str) -> str:

@@ -9,12 +9,12 @@
     "pending": "Pending",
     "escalations": "Escalations",
     "filterToEscalations": "Filter to escalations",
-    "recoverable": "Recoverable"
+    "atRisk": "At risk"
   },
   "summary": {
     "loading": "Loading supplier invoice decisions…",
-    "recoverable_one": "{{amount}} recoverable across {{count}} reviewed invoice",
-    "recoverable_other": "{{amount}} recoverable across {{count}} reviewed invoices",
+    "atRisk_one": "{{amount}} at risk across {{count}} reviewed invoice",
+    "atRisk_other": "{{amount}} at risk across {{count}} reviewed invoices",
     "escalations_one": "{{count}} escalation",
     "escalations_other": "{{count}} escalations",
     "pending_one": "{{count}} pending",
@@ -96,7 +96,7 @@
     "title_other": "Start assurance for {{count}} invoices?",
     "close": "Close batch confirmation",
     "guidance": "Each newly accepted invoice starts a hosted agent orchestration and may incur usage cost. Active runs are reused automatically. Caldova starts at most {{concurrency}} invoices concurrently and accepts up to {{max}} per batch.",
-    "currentRecoverable": "Current recoverable amount",
+    "currentRecoverable": "Current amount at risk",
     "starting": "Starting batch…",
     "start": "Start batch assurance"
   },

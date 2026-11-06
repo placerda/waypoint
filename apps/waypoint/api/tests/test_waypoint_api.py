@@ -1090,6 +1090,40 @@ async def test_invoice_assurance_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("metadata", [{}, {"expert_evidence": []}])
+async def test_invoice_decision_feed_counts_referenced_records_without_expert_planes(
+    client: AsyncClient, metadata: dict[str, object]
+):
+    override_settings(Settings(local_auth_enabled=True, default_seed_enabled=True))
+    evidence = (await client.get("/api/evidence?invoice_id=inv-2026-08034")).json()
+    evidence_ids = [record["id"] for record in evidence]
+    assert evidence_ids
+    case = (
+        await client.post(
+            "/api/cases",
+            json={"invoice_id": "inv-2026-08034", "summary": "Native agent evidence."},
+        )
+    ).json()
+    response = await client.post(
+        f"/api/cases/{case['id']}/recommendations",
+        json={
+            "decision": "escalate",
+            "reasoning": "Escalate the charge based on referenced invoice evidence.",
+            "money_at_risk": "111000",
+            "evidence_ids": evidence_ids + evidence_ids,
+            "metadata": metadata,
+        },
+    )
+    assert response.status_code == 201
+    response = await client.get("/api/invoice-decisions")
+    assert response.status_code == 200
+    row = next(item for item in response.json() if item["invoice_id"] == "inv-2026-08034")
+    assert row["agent_plane_count"] == 0
+    assert row["agent_source_count"] == len(set(evidence_ids))
+    assert row["decision"] == "Escalate"
+
+
+@pytest.mark.asyncio
 async def test_invoice_decision_feed_reflects_newest_agent_run(client: AsyncClient):
     override_settings(Settings(local_auth_enabled=True, default_seed_enabled=True))
 

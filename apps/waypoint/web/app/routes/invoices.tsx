@@ -842,8 +842,11 @@ export default function Invoices() {
     return sorted;
   }, [decisions, decisionFilter, severityFilter, supplierFilter, categoryFilter, query, sort]);
 
-  const totalOverpayment = useMemo(
-    () => visible.reduce((sum, row) => sum + overpaymentAmount(row), 0),
+  const totalAtRisk = useMemo(
+    () =>
+      visible
+        .filter((row) => row.has_agent_decision)
+        .reduce((sum, row) => sum + overpaymentAmount(row), 0),
     [visible],
   );
   const escalationCount = useMemo(
@@ -1036,8 +1039,8 @@ export default function Invoices() {
                       title={escalationCount > 0 ? t("tiles.filterToEscalations") : undefined}
                     />
                     <InfoTile
-                      label={t("tiles.recoverable")}
-                      value={loading ? "..." : formatMoney(fmt, totalOverpayment)}
+                      label={t("tiles.atRisk")}
+                      value={loading ? "..." : formatMoney(fmt, totalAtRisk)}
                       emphasized
                     />
                   </div>
@@ -1048,9 +1051,9 @@ export default function Invoices() {
                     ? t("summary.loading")
                     : t("summary.line", {
                         facts: [
-                          t("summary.recoverable", {
+                          t("summary.atRisk", {
                             count: reviewedCount,
-                            amount: formatMoney(fmt, totalOverpayment),
+                            amount: formatMoney(fmt, totalAtRisk),
                           }),
                           t("summary.escalations", { count: escalationCount }),
                           pendingCount > 0 ? t("summary.pending", { count: pendingCount }) : null,
@@ -3467,7 +3470,7 @@ function EvidenceSection({
       }
     >
       <div className="divide-y divide-slate-200 border-t border-slate-200">
-        {IQ_PLANES.map((plane) => {
+        {(fanout.length > 0 ? IQ_PLANES : []).map((plane) => {
           const lanes = byPlane.get(plane.key) ?? [];
           const items = lanes.flatMap((lane) => lane.evidence ?? []);
           const summary = lanes.map((lane) => lane.summary).filter(Boolean).join(" ");
