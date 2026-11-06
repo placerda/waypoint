@@ -222,13 +222,17 @@
     "pointsTo": "Apunta a {{decision}}"
   },
   "citation": {
-    "noText": "(sin texto de cita)"
+    "noText": "(sin texto de cita)",
+    "retrievedPassage": "Ver pasaje recuperado"
   },
   "clauses": {
     "title": "Fundamento contractual y de políticas",
     "cited_one": "{{count}} cláusula citada",
     "cited_many": "{{count}} cláusulas citadas",
     "cited_other": "{{count}} cláusulas citadas",
+    "retrieved_one": "{{count}} pasaje nativo recuperado",
+    "retrieved_many": "{{count}} pasajes nativos recuperados",
+    "retrieved_other": "{{count}} pasajes nativos recuperados",
     "empty": "No hay ningún fundamento contractual ni de políticas vinculado a esta decisión. Trátala como no respaldada hasta que un revisor la vincule a una cláusula.",
     "noCitations": "FoundryIQ no registró citas a nivel de cláusula para esta ejecución. Los documentos de abajo son el fundamento registrado."
   },
@@ -244,6 +248,10 @@
     "sources_many": "{{count}} fuentes",
     "sources_other": "{{count}} fuentes",
     "nothingRecorded": "No se registró nada para esta ejecución.",
+    "references_one": "{{count}} referencia",
+    "references_many": "{{count}} referencias",
+    "references_other": "{{count}} referencias",
+    "retrievedListed": "Los pasajes recuperados aparecen en Fundamento contractual y de políticas. La recuperación no establece una cita del modelo a nivel de cláusula.",
     "clausesListed": "Las cláusulas aparecen en Fundamento contractual y de políticas.",
     "noClauseCitations": "No se registraron citas a nivel de cláusula.",
     "expertFallback": "Experto",

@@ -209,12 +209,15 @@
     "pointsTo": "Points to {{decision}}"
   },
   "citation": {
-    "noText": "(no citation text)"
+    "noText": "(no citation text)",
+    "retrievedPassage": "View retrieved passage"
   },
   "clauses": {
     "title": "Contract and policy basis",
     "cited_one": "{{count}} clause cited",
     "cited_other": "{{count}} clauses cited",
+    "retrieved_one": "{{count}} native passage retrieved",
+    "retrieved_other": "{{count}} native passages retrieved",
     "empty": "No contract or policy basis is attached to this decision. Treat it as unsupported until a reviewer ties it to a clause.",
     "noCitations": "FoundryIQ didn't record clause-level citations for this run. The documents below are the basis on file."
   },
@@ -227,6 +230,9 @@
     "sources_one": "{{count}} source",
     "sources_other": "{{count}} sources",
     "nothingRecorded": "Nothing recorded for this run.",
+    "references_one": "{{count}} reference",
+    "references_other": "{{count}} references",
+    "retrievedListed": "Retrieved passages are listed under Contract and policy basis. Retrieval does not establish a clause-level citation by the model.",
     "clausesListed": "Clauses are listed under Contract and policy basis.",
     "noClauseCitations": "No clause-level citations recorded.",
     "expertFallback": "Expert",

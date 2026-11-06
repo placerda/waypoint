@@ -11,7 +11,7 @@ from castia.inference.tools import Tool
 from dotenv import load_dotenv
 
 from gateway import configured_gateway_model
-from toolbox import assurance_tools
+from toolbox import assurance_tools, foundryiq_evidence_scope
 from tools import read_tools
 from write_tools import write_tools
 
@@ -45,12 +45,13 @@ _ASSURANCE_TOOLS: list[Tool | dict[str, Any]] = [*read_tools(), *write_tools()]
 @app.responses()
 async def assurance(text: str, model: Model = _CHAT_MODEL_DEPENDENCY) -> str:
     """The sole write tool records assurance; it never executes a payment."""
-    return await model.respond_with_tools(
-        text,
-        tools=[*_ASSURANCE_TOOLS, *await assurance_tools()],
-        activity=None,
-        max_iterations=8,
-    )
+    with foundryiq_evidence_scope():
+        return await model.respond_with_tools(
+            text,
+            tools=[*_ASSURANCE_TOOLS, *await assurance_tools()],
+            activity=None,
+            max_iterations=8,
+        )
 
 
 if __name__ == "__main__":

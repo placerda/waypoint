@@ -13,7 +13,13 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from knowledge import minimal_retrieve_request, validate_minimal_mcp_endpoint
-from toolbox import NativeToolbox, assurance_tools
+from toolbox import (
+    NativeToolbox,
+    assurance_tools,
+    capture_foundryiq_evidence,
+    foundryiq_evidence_scope,
+    recorded_foundryiq_evidence,
+)
 
 NATIVE = (
     "https://private.search.windows.net/knowledgebases/contracts/mcp"
@@ -78,6 +84,10 @@ class MinimalFoundryIQTests(unittest.IsolatedAsyncioTestCase):
                     }])},
                     {"type": "text", "text": json.dumps({
                         "kind": "reference", "ref_id": 0, "uri": "https://private/source",
+                        "sourceData": {
+                            "title": "Capacity Reservation Agreement: BluePeak Biologics",
+                            "metadata_storage_path": "https://private.blob.core.windows.net/docs/bluepeak.md",
+                        },
                     })},
                 ]},
             }[method]
@@ -119,6 +129,65 @@ class MinimalFoundryIQTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_native_sse_is_supported(self):
         self.assertIn("content", await self.exercise(sse=True))
+
+    async def test_native_passages_are_captured_once_and_copies_cannot_change_provenance(self):
+        with foundryiq_evidence_scope():
+            await self.exercise()
+            await self.exercise()
+            lanes = recorded_foundryiq_evidence()
+            self.assertEqual(len(lanes), 1)
+            self.assertEqual(lanes[0]["plane"], "foundryiq")
+            self.assertEqual(lanes[0]["provenance"], "native-foundry-mcp")
+            self.assertEqual(len(lanes[0]["evidence"]), 1)
+            item = lanes[0]["evidence"][0]
+            self.assertEqual(item["ref_id"], 0)
+            self.assertEqual(item["claim"], "BluePeak charges USD 118 per excess hour")
+            self.assertEqual(item["source_uri"], "https://private.blob.core.windows.net/docs/bluepeak.md")
+            self.assertNotIn("confidence", item)
+            self.assertNotIn("supports", item)
+            item["claim"] = "Model-invented replacement"
+            self.assertNotEqual(recorded_foundryiq_evidence()[0]["evidence"][0]["claim"], item["claim"])
+        self.assertEqual(recorded_foundryiq_evidence(), [])
+
+    async def test_concurrent_investigations_and_errors_do_not_share_citations(self):
+        async def investigate(title):
+            with foundryiq_evidence_scope():
+                capture_foundryiq_evidence(
+                    [{"ref_id": 0, "content": title}],
+                    [{"ref_id": 0, "sourceData": {
+                        "title": title, "url": f"https://private.blob.core.windows.net/docs/{title}.md",
+                    }}],
+                )
+                await asyncio.sleep(0)
+                return recorded_foundryiq_evidence()[0]["evidence"][0]["claim"]
+
+        self.assertEqual(await asyncio.gather(investigate("A"), investigate("B")), ["A", "B"])
+        self.assertEqual(recorded_foundryiq_evidence(), [])
+        with self.assertRaisesRegex(RuntimeError, "turn failed"), foundryiq_evidence_scope():
+            await self.exercise()
+            raise RuntimeError("turn failed")
+        self.assertEqual(recorded_foundryiq_evidence(), [])
+
+    def test_unmatched_or_credential_bearing_sources_fail_without_partial_capture(self):
+        valid = {"ref_id": 0, "sourceData": {
+            "title": "Agreement", "url": "https://private.blob.core.windows.net/docs/agreement.md",
+        }}
+        with foundryiq_evidence_scope():
+            with self.assertRaises(RuntimeError):
+                capture_foundryiq_evidence(
+                    [{"ref_id": 0, "content": "Valid passage"}, {"ref_id": 1, "content": "Orphan passage"}],
+                    [valid],
+                )
+            self.assertEqual(recorded_foundryiq_evidence(), [])
+        for references in (
+            [],
+            [valid, valid],
+            [{"ref_id": 0}],
+            [{"ref_id": 0, "sourceData": {"title": "Agreement", "url": "https://private/source?sig=secret"}}],
+        ):
+            with self.subTest(references=references), foundryiq_evidence_scope(), self.assertRaises(RuntimeError):
+                capture_foundryiq_evidence([{"ref_id": 0, "content": "Actual passage"}], references)
+            self.assertEqual(recorded_foundryiq_evidence(), [])
 
     async def test_agent_token_timeout_is_bounded_and_prevents_http(self):
         with patch.dict(os.environ, CONFIG), patch(

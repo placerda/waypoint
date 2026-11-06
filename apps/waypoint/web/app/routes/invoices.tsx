@@ -130,6 +130,7 @@ interface FanoutEvidenceItem {
   source_ref?: string;
   classification?: string;
   confidence?: number;
+  provenance?: string;
 }
 
 interface FanoutLane {
@@ -137,6 +138,7 @@ interface FanoutLane {
   plane?: string;
   summary?: string;
   evidence?: FanoutEvidenceItem[];
+  provenance?: string;
 }
 
 interface AssuranceCase {
@@ -3321,9 +3323,16 @@ function CitationItem({
   const labels = useLabels();
   return (
     <li className="py-2.5">
-      <p className="text-sm leading-6 text-slate-800">
-        {item.claim ? (quote ? `“${item.claim}”` : item.claim) : t("citation.noText")}
-      </p>
+      {item.provenance === "native-foundry-mcp" ? (
+        <details className="text-sm leading-6 text-slate-800">
+          <summary className="cursor-pointer font-medium">{t("citation.retrievedPassage")}</summary>
+          <pre className="mt-2 whitespace-pre-wrap break-words font-sans">{item.claim}</pre>
+        </details>
+      ) : (
+        <p className="text-sm leading-6 text-slate-800">
+          {item.claim ? (quote ? `“${item.claim}”` : item.claim) : t("citation.noText")}
+        </p>
+      )}
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
         {item.source_ref ? (
           <SourceReference
@@ -3358,13 +3367,18 @@ function ClauseSection({
     .filter((lane) => lanePlaneKey(lane) === "foundryiq")
     .flatMap((lane) => lane.evidence ?? []);
   const empty = !basisSummary && clauses.length === 0 && documents.length === 0;
+  const retrievedCount = clauses.filter((item) => item.provenance === "native-foundry-mcp").length;
+  const citedCount = clauses.length - retrievedCount;
   const { t } = useTranslation("invoices");
 
   return (
     <CaseSection
       id="case-clauses"
       title={t("clauses.title")}
-      meta={clauses.length > 0 ? t("clauses.cited", { count: clauses.length }) : undefined}
+      meta={clauses.length > 0 ? [
+        retrievedCount > 0 ? t("clauses.retrieved", { count: retrievedCount }) : null,
+        citedCount > 0 ? t("clauses.cited", { count: citedCount }) : null,
+      ].filter(Boolean).join(" · ") : undefined}
     >
       {empty ? (
         <p className="text-sm leading-6 text-slate-600">
@@ -3458,6 +3472,10 @@ function EvidenceSection({
   }
   const citationTotal = fanout.reduce((sum, lane) => sum + (lane.evidence?.length ?? 0), 0);
   const planesUsed = byPlane.size + other.size;
+  const hasNativeRetrieval = fanout.some((lane) => lane.provenance === "native-foundry-mcp");
+  const visiblePlanes = fanout.length === 0
+    ? []
+    : hasNativeRetrieval ? IQ_PLANES.filter((plane) => byPlane.has(plane.key)) : IQ_PLANES;
 
   return (
     <CaseSection
@@ -3465,12 +3483,12 @@ function EvidenceSection({
       title={t("evidence.title")}
       meta={
         citationTotal > 0
-          ? `${t("evidence.citations", { count: citationTotal })} · ${t("evidence.sources", { count: planesUsed })}`
+          ? `${t(hasNativeRetrieval ? "evidence.references" : "evidence.citations", { count: citationTotal })} · ${t("evidence.sources", { count: planesUsed })}`
           : undefined
       }
     >
       <div className="divide-y divide-slate-200 border-t border-slate-200">
-        {(fanout.length > 0 ? IQ_PLANES : []).map((plane) => {
+        {visiblePlanes.map((plane) => {
           const lanes = byPlane.get(plane.key) ?? [];
           const items = lanes.flatMap((lane) => lane.evidence ?? []);
           const summary = lanes.map((lane) => lane.summary).filter(Boolean).join(" ");
@@ -3480,6 +3498,7 @@ function EvidenceSection({
               label={plane.label}
               scope={labels.planeScope(plane.key)}
               count={items.length}
+              noun={lanes.some((lane) => lane.provenance === "native-foundry-mcp") ? "reference" : "citation"}
             >
               {lanes.length === 0 ? (
                 <p className="text-sm text-slate-600">{t("evidence.nothingRecorded")}</p>
@@ -3487,7 +3506,8 @@ function EvidenceSection({
                 <p className="text-sm leading-6 text-slate-600">
                   {summary ? `${summary} ` : ""}
                   {items.length > 0
-                    ? t("evidence.clausesListed")
+                    ? t(lanes.some((lane) => lane.provenance === "native-foundry-mcp")
+                      ? "evidence.retrievedListed" : "evidence.clausesListed")
                     : t("evidence.noClauseCitations")}
                 </p>
               ) : (
@@ -3577,7 +3597,7 @@ function EvidenceGroup({
   label: string;
   scope: string;
   count: number;
-  noun?: "citation" | "record";
+  noun?: "citation" | "record" | "reference";
   logo?: string;
   children: ReactNode;
 }) {
@@ -3600,7 +3620,7 @@ function EvidenceGroup({
           <span className="shrink-0 text-xs tabular-nums text-slate-600">
             {noun === "record"
               ? t("evidence.records", { count })
-              : t("evidence.citations", { count })}
+              : t(noun === "reference" ? "evidence.references" : "evidence.citations", { count })}
           </span>
         ) : null}
       </div>

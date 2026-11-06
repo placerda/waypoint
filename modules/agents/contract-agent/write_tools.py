@@ -30,6 +30,7 @@ from typing import Any
 import httpx
 from castia.inference.tools import Tool
 
+from toolbox import recorded_foundryiq_evidence
 from tools import _as_list, _float, _str_list, _WaypointClient, is_waypoint_configured
 
 # Closed vocabularies mirrored from the Waypoint API cases schemas.
@@ -259,6 +260,7 @@ async def _record_assurance_impl(activity: Any, *, result_json: str) -> dict[str
     grounded = state == "grounded"
     money_at_risk = grounding["money_at_risk"] if grounded else 0.0
     evidence_ids = grounding["evidence_ids"] if grounded else []
+    expert_evidence = recorded_foundryiq_evidence() if grounded else []
     finding_id = grounding["finding_id"]
     reasoning = str(result.get("reasoning") or "").strip()
     confidence = _float(result.get("confidence"))
@@ -276,6 +278,8 @@ async def _record_assurance_impl(activity: Any, *, result_json: str) -> dict[str
         "invoice_id": invoice_id, "invoice_number": invoice_number, "decision": decision,
         "confidence": confidence, "money_at_risk": money_at_risk, "finding_count": grounding["finding_count"],
     }
+    if expert_evidence:
+        run_metadata["fanout"] = expert_evidence
 
     writer = _WaypointWriter()
     run_id: str | None = None
@@ -303,7 +307,12 @@ async def _record_assurance_impl(activity: Any, *, result_json: str) -> dict[str
             case_id, decision=decision, reasoning=reasoning, confidence=confidence,
             money_at_risk=money_at_risk, evidence_ids=evidence_ids,
             proposed_next_actions=_str_list(result.get("proposed_next_actions")),
-            metadata={"waypoint_run_id": run_id, "invoice_number": invoice_number, "decision_governance": decision_governance},
+            metadata={
+                "waypoint_run_id": run_id,
+                "invoice_number": invoice_number,
+                "decision_governance": decision_governance,
+                **({"expert_evidence": expert_evidence} if expert_evidence else {}),
+            },
         )
         correlation["waypoint_recommendation_id"] = _id(recommendation)
         if correlation["waypoint_recommendation_id"] is None:

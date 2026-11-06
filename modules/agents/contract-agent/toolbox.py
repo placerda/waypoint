@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
+import copy
 import json
 import logging
 import os
-from typing import Any
+from typing import Any, Iterator
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -18,6 +21,71 @@ from gateway import required_env
 from knowledge import validate_minimal_mcp_endpoint
 
 LOGGER = logging.getLogger(__name__)
+_NATIVE_EVIDENCE: ContextVar[dict[tuple[str, str], dict[str, Any]] | None] = ContextVar(
+    "waypoint_native_foundryiq_evidence", default=None
+)
+
+
+@contextmanager
+def foundryiq_evidence_scope() -> Iterator[None]:
+    token = _NATIVE_EVIDENCE.set({})
+    try:
+        yield
+    finally:
+        _NATIVE_EVIDENCE.reset(token)
+
+
+def recorded_foundryiq_evidence() -> list[dict[str, Any]]:
+    evidence = _NATIVE_EVIDENCE.get()
+    if not evidence:
+        return []
+    return [{
+        "agent": "Native knowledge retrieval",
+        "plane": "foundryiq",
+        "provenance": "native-foundry-mcp",
+        "summary": "Passages retrieved in this investigation, not an independent expert verdict.",
+        "evidence": copy.deepcopy(list(evidence.values())),
+    }]
+
+
+def capture_foundryiq_evidence(
+    passages: list[dict[str, Any]], references: list[dict[str, Any]]
+) -> None:
+    references_by_id = {item["ref_id"]: item for item in references}
+    if len(references_by_id) != len(references):
+        raise RuntimeError("Native knowledge MCP returned ambiguous reference IDs")
+    captured: dict[tuple[str, str], dict[str, Any]] = {}
+    for passage in passages:
+        reference = references_by_id.get(passage.get("ref_id"))
+        if reference is None:
+            raise RuntimeError("Native knowledge passage has no matching source reference")
+        source = reference.get("sourceData")
+        if not isinstance(source, dict):
+            raise RuntimeError("Native knowledge reference has no sourceData")
+        title = source.get("title")
+        uri = source.get("metadata_storage_path") or source.get("url")
+        content = passage.get("content")
+        if (
+            not isinstance(title, str) or not title.strip()
+            or not isinstance(uri, str) or not isinstance(content, str) or not content.strip()
+        ):
+            raise RuntimeError("Native knowledge source title, URI and passage are required")
+        parsed = urlsplit(uri)
+        if (
+            parsed.scheme != "https" or not parsed.hostname
+            or parsed.username or parsed.password or parsed.query or parsed.fragment
+        ):
+            raise RuntimeError("Native knowledge source URI must be HTTPS without credentials")
+        captured[(uri, content)] = {
+            "claim": content,
+            "source_ref": title,
+            "source_uri": uri,
+            "ref_id": reference["ref_id"],
+            "provenance": "native-foundry-mcp",
+        }
+    evidence = _NATIVE_EVIDENCE.get()
+    if evidence is not None:
+        evidence.update(captured)
 
 
 class NativeToolbox:
@@ -133,6 +201,7 @@ class NativeToolbox:
             ]
             if not passages or not references:
                 raise RuntimeError("Native knowledge MCP returned no grounding and source references")
+            capture_foundryiq_evidence(passages, references)
             return result
 
         return Tool(

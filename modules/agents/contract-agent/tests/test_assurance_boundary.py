@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -12,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import httpx
 
 from tools import _gather_evidence_impl, _WaypointClient
+from toolbox import capture_foundryiq_evidence, foundryiq_evidence_scope, recorded_foundryiq_evidence
 from write_tools import _record_assurance_impl, _WaypointWriter, write_tools
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -85,6 +87,7 @@ class AssuranceBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 "invoice_id": "INV-2026-08034", "decision": "approve",
                 "money_at_risk": 1, "reasoning": "Supplier-caused deviation, contract section 4.",
                 "confidence": 0.9, "summary": "Escalate contamination investigation.",
+                "expert_evidence": [{"agent": "Invented expert", "evidence": [{"source_ref": "Invented source"}]}],
             }))
         self.assertTrue(result["ok"])
         self.assertEqual(result["decision"], "escalate")
@@ -96,8 +99,49 @@ class AssuranceBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(float(recommendation["money_at_risk"]), 111000)
         self.assertEqual(set(recommendation["evidence_ids"]),
                          {"ev-inv-2026-08034-01", "ev-inv-2026-08034-02"})
+        self.assertNotIn("expert_evidence", recommendation["metadata"])
         self.assertEqual([t.name for t in write_tools()], ["record_assurance"])
         self.assertEqual(len(writes), 4)
+
+    async def test_recorder_persists_native_passages_not_model_citation_metadata(self):
+        seed = json.loads(SEED.read_text(encoding="utf-8"))
+        grounding = {
+            "state": "grounded", "invoice_id": "INV-2026-08034",
+            "invoice_number": "INV-2026-08034", "money_at_risk": 111000,
+            "evidence_ids": ["ev-inv-2026-08034-01", "ev-inv-2026-08034-02"],
+            "finding_id": seed["findings"][0]["id"], "findings": seed["findings"],
+            "finding_count": len(seed["findings"]),
+        }
+        writer = SimpleNamespace(
+            create_case=AsyncMock(return_value={"id": "case-1"}),
+            open_run=AsyncMock(return_value={"id": "run-1"}),
+            create_recommendation=AsyncMock(return_value={"id": "rec-1"}),
+            update_run=AsyncMock(return_value={"id": "run-1", "status": "completed"}),
+        )
+        with patch.dict(os.environ, ENV), foundryiq_evidence_scope(), \
+                patch("write_tools._ground", AsyncMock(return_value=grounding)), \
+                patch("write_tools._WaypointWriter", return_value=writer):
+            capture_foundryiq_evidence(
+                [{"ref_id": 0, "content": "Supplier-caused restart charges are not billable."}],
+                [{"ref_id": 0, "sourceData": {
+                    "title": "Capacity Reservation Agreement",
+                    "metadata_storage_path": "https://private.blob.core.windows.net/docs/agreement.md",
+                }}],
+            )
+            expected = recorded_foundryiq_evidence()
+            result = await _record_assurance_impl(None, result_json=json.dumps({
+                "invoice_id": "INV-2026-08034", "decision": "approve",
+                "expert_evidence": [{"agent": "Invented expert", "evidence": [{"source_ref": "Invented source"}]}],
+                "fanout": [{"agent": "Invented expert"}],
+            }))
+        self.assertTrue(result["ok"])
+        recommendation = writer.create_recommendation.call_args.kwargs
+        self.assertEqual(recommendation["metadata"]["expert_evidence"], expected)
+        self.assertEqual(writer.open_run.call_args.kwargs["metadata"]["fanout"], expected)
+        self.assertEqual(writer.update_run.call_args.kwargs["metadata"]["fanout"], expected)
+        self.assertEqual(recommendation["decision"], "escalate")
+        self.assertEqual(recommendation["money_at_risk"], 111000)
+        self.assertEqual(recorded_foundryiq_evidence(), [])
 
     async def test_native_api_rejecting_completion_is_not_success(self):
         async def denied(request):

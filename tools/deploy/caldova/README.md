@@ -44,6 +44,14 @@ or Foundry IQ provenance. The aggregate shows money at risk for reviewed
 invoices, including escalations, not guaranteed recovery. An agent with no
 recorded expert lanes shows its actual invoice records instead of empty IQ lanes.
 
+The recorder captures successful native MCP passages and their actual source
+titles, original URIs and reference IDs in a request-local scope. Repeated
+passages are deduplicated. These are retrieved passages, not an independent
+expert verdict or a model-invented citation. Model-supplied citation metadata
+is ignored. Historical recommendations are not backfilled. Deploy this code
+only through the same candidate evaluation gate, never by changing the accepted
+production version while native evaluation is blocked.
+
 Success and failure receipts are retained as Actions artifacts. They identify
 source commit, immutable image, candidate version, native evaluation and report.
 The deployment step rechecks all identifiers and the unchanged active baseline.
