@@ -310,6 +310,11 @@ Runtime logs identify token acquisition, authenticated request dispatch and HTTP
 status without recording tokens or document contents. These stages distinguish
 hosted identity failures from private endpoint access failures.
 
+Telemetry exporter failures remain visible on stderr but are not re-exported
+through the application log handler. Re-exporting the exporter's own errors
+creates a feedback loop that can prevent the framework's end-of-turn flush
+from finishing. Application logs and trace exporters remain enabled.
+
 Mocked tests prove client serialization and continuation preservation,
 not private-service compatibility. Before setting the candidate-route gate
 `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=true`, independently verify:
