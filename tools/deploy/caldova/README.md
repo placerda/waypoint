@@ -22,6 +22,20 @@ promote a different version.
 
 ## Real quality gate
 
+Before any private executor job, the hosted source-validation job checks API
+privacy and telemetry, every contract-agent regression, fail-closed release
+contracts, web types, both locales, evidence rendering and the production web
+build. `npm run evidence:check` renders the real invoice evidence components
+in isolation. It checks retrieval versus citation labels, escaped passages,
+native active lanes, mixed counts and unchanged legacy behavior. It is not
+a browser end-to-end test or native evaluation approval.
+
+The optional `source_only` dispatch input runs these checks without queuing a
+private executor or performing Azure authentication, builds, evaluations or
+promotion. Supply `runner_label=source-only-validation` for this mode.
+The default remains a full release. A successful source-only run is not a
+successful deployment or permission to change the active version.
+
 Three versioned, read-only cases cover the known discrepancy, the separate
 base-capacity line and an unavailable invoice. A structured `gpt-6.1-sol` judge
 accessed only through the private AI gateway scores business accuracy, grounding,

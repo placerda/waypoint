@@ -4,9 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       runner_label:
-        description: Unique label of the single-use private executor
+        description: Unique private executor label, unused for source-only checks
         required: true
         type: string
+      source_only:
+        description: Validate source without building, evaluating or deploying in Azure
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,13 +35,29 @@ jobs:
       - name: Check API transport, privacy and telemetry regressions
         working-directory: apps/waypoint/api
         run: uv run --python 3.13 --frozen pytest tests/test_assurance_runs.py tests/test_telemetry.py tests/test_private_application.py tests/test_app_simplification.py -q
+      - name: Check agent transport, governance and retrieval provenance
+        working-directory: modules/agents/contract-agent
+        run: uv run --python 3.13 --frozen python -m unittest discover -s tests -p 'test_*.py' -q
       - name: Check fail-closed release gates
         run: uv run --no-project --python 3.13 --with-requirements tools/deploy/caldova/requirements.txt python -m unittest discover -s tools/deploy/caldova -p test_release.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/waypoint/web/package-lock.json
+      - name: Check web types, localization and evidence rendering
+        working-directory: apps/waypoint/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck -- --pretty false
+          npm run i18n:check
+          npm run evidence:check
+          npm run build -- --logLevel error
 
   release:
     name: Build, evaluate and promote the same candidate
     needs: validate
-    if: github.actor == 'placerda' && github.ref == 'refs/heads/caldova-private-invoice'
+    if: github.actor == 'placerda' && github.ref == 'refs/heads/caldova-private-invoice' && !inputs.source_only
     runs-on: [self-hosted, Linux, X64, "${{ inputs.runner_label }}"]
     environment: caldova-private
     timeout-minutes: 45
