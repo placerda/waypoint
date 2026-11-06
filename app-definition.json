@@ -59,7 +59,7 @@
       "name": "contract-agent",
       "kind": "azure.ai.agent",
       "path": "modules/agents/contract-agent",
-      "source": {"commit": "656724666d77c6ddecbb9845bd7a0f5729703382"},
+      "source": {"commit": "5eaa3ec88bcd9272575ebb88b683b3864897c00f"},
       "profiles": [],
       "settings": [
         {"key": "FOUNDRY_PROJECT_ENDPOINT"},
