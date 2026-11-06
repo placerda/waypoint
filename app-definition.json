@@ -60,7 +60,7 @@
       "name": "contract-agent",
       "kind": "azure.ai.agent",
       "path": "modules/agents/contract-agent",
-      "source": {"commit": "0b922de9fe4601f5b9c53f0cdba38be1e44993de"},
+      "source": {"commit": "eac0473889b5bac56637047405982d73624ae8c0"},
       "profiles": [],
       "settings": [
         {"key": "AZURE_AI_MODEL_DEPLOYMENT_NAME"},
