@@ -90,11 +90,17 @@ not empty/default production endpoints.
 | API persistence | `APP_DATABASE_CONNECTION` = password-free TLS PostgreSQL application DSN through a secret reference; `APP_DATABASE_ENTRA_ENABLED=true`; `APP_DATABASE_ENTRA_CLIENT_ID` = API user-assigned managed identity client ID; `APP_REQUIRE_POSTGRES=true`; `APP_RUN_STARTUP_DATABASE_BOOTSTRAP=false` |
 | API corpus | `APP_LEDGERFIELD_SEED_PATH=/app/corpus/data/waypoint/waypoint-seed.json`; `APP_CORPUS_LOCAL_ROOT=/app/corpus`; `APP_SEED_REQUIRED=true`; `APP_DEFAULT_SEED_ENABLED=false` |
 | API agent invocation | `APP_FOUNDRY_ENDPOINT` = new agent project endpoint; `APP_FOUNDRY_ORCHESTRATOR_AGENT_NAME=contract-agent` |
-| Agent project | `FOUNDRY_PROJECT_ENDPOINT` = new agent project `/api/projects/<project>` endpoint, with **no model deployments** |
+| Agent project | Platform-injected `FOUNDRY_PROJECT_ENDPOINT` = new agent project `/api/projects/<project>` endpoint, with **no model deployments** |
 | Agent model | `AZURE_AI_MODEL_DEPLOYMENT_NAME` = deployment in the separate model account; `WAYPOINT_GATEWAY_BASE_URL` = private-reachable APIM HTTPS `/openai/v1/`; `WAYPOINT_GATEWAY_SCOPE=https://cognitiveservices.azure.com/.default` |
 | Agent tools | `WAYPOINT_API_BASE_URL` = new private API HTTPS URL; `WAYPOINT_API_SCOPE` = API application ID URI + `/.default` |
 | FoundryIQ | `TOOLBOX_NAME=contract-toolbox`; `TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT` = new private project toolbox MCP URL; `WAYPOINT_KB_TOOL_NAME` = actual published KB retrieve tool name; `WAYPOINT_KB_MCP_ENDPOINT` = upstream native Search `/knowledgebases/<kb>/mcp?api-version=2026-08-01-preview` URL; `WAYPOINT_FOUNDRYIQ_RETRIEVAL_MODE=minimal-extractive`; `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=false` until accepted |
 | Telemetry | Foundation-managed OTel/Application Insights settings; content recording is not enabled by this adaptation |
+
+Foundry injects `FOUNDRY_PROJECT_ENDPOINT` into the hosted container. Do not send
+`FOUNDRY_*` or `AGENT_*` variables in hosted deployment settings, because those
+prefixes are platform-reserved. Supply the project endpoint explicitly only
+for local execution. The azd deployment binding uses `AZURE_AI_PROJECT_ID` and
+`AZURE_AI_PROJECT_ENDPOINT` for the same existing project.
 
 The native API supports delegated-user tokens and explicit managed-identity
 application roles. Assign the hosted agent `Waypoint.Write` (which includes read

@@ -62,7 +62,6 @@
       "source": {"commit": "5eaa3ec88bcd9272575ebb88b683b3864897c00f"},
       "profiles": [],
       "settings": [
-        {"key": "FOUNDRY_PROJECT_ENDPOINT"},
         {"key": "AZURE_AI_MODEL_DEPLOYMENT_NAME"},
         {"key": "WAYPOINT_GATEWAY_BASE_URL"},
         {"key": "WAYPOINT_GATEWAY_SCOPE"},
