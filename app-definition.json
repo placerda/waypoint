@@ -53,6 +53,8 @@
         {"key": "APP_MSAL_ALLOWED_APP_IDS"},
         {"key": "APP_FOUNDRY_ENDPOINT"},
         {"key": "APP_FOUNDRY_ORCHESTRATOR_AGENT_NAME", "value": "contract-agent"},
+        {"key": "APP_FOUNDRY_ORCHESTRATOR_AGENT_VERSION", "value": "4"},
+        {"key": "APP_FOUNDRY_RESPONSES_API_VERSION", "value": "v1"},
         {"key": "APP_CORS_ALLOWED_ORIGINS"}
       ]
     },

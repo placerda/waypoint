@@ -165,6 +165,11 @@ class Settings(BaseSettings):
         default="assurance-orchestrator",
         description="Server-owned hosted agent used for invoice assurance triggers",
     )
+    foundry_orchestrator_agent_version: str | None = Field(
+        default=None,
+        pattern=r"^[1-9][0-9]*$",
+        description="Explicit promoted hosted version, isolated from newer candidates",
+    )
     foundry_responses_api_version: str = Field(
         default="2025-11-15-preview",
         description="Foundry hosted-agent Responses API version",

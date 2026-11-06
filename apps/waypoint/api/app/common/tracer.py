@@ -54,7 +54,7 @@ def _set_span_attributes(span: Span, attributes: dict[str, Any]) -> None:
 def _trace_sync(
     func: Callable[..., Any],
     tracer: otel_trace.Tracer,
-    capture_args: bool = True,
+    capture_args: bool = False,
     ignore_params: list[str] | None = None,
 ) -> Callable[..., Any]:
     """Wrap a synchronous function with tracing."""
@@ -88,7 +88,7 @@ def _trace_sync(
 def _trace_async(
     func: Callable[..., Any],
     tracer: otel_trace.Tracer,
-    capture_args: bool = True,
+    capture_args: bool = False,
     ignore_params: list[str] | None = None,
 ) -> Callable[..., Any]:
     """Wrap an asynchronous function with tracing."""
@@ -123,7 +123,7 @@ def trace(
     func: Callable[..., Any] | None = None,
     *,
     tracer_name: str = DEFAULT_TRACER_NAME,
-    capture_args: bool = True,
+    capture_args: bool = False,
     ignore_params: list[str] | None = None,
 ) -> Callable[..., Any]:
     """Decorator to trace function execution with OpenTelemetry spans.
@@ -140,7 +140,7 @@ def trace(
     Args:
         func: The function to wrap (when used without parentheses)
         tracer_name: Name for the tracer instance
-        capture_args: Whether to capture function arguments as span attributes
+        capture_args: Whether to capture function arguments as span attributes (off by default)
         ignore_params: List of parameter names to exclude from tracing
 
     Returns:

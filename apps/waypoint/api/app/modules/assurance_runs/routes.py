@@ -35,6 +35,7 @@ async def get_assurance_runs_service(
             project_endpoint=settings.foundry_endpoint,
             api_version=settings.foundry_responses_api_version,
             timeout_seconds=settings.foundry_start_timeout_seconds,
+            agent_version=settings.foundry_orchestrator_agent_version,
         ),
     )
 

@@ -94,6 +94,99 @@ async def test_foundry_client_sends_managed_identity_bearer_token(monkeypatch):
     assert captured_headers["Authorization"] == "Bearer managed-identity-token"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("session_version", "response_session", "error"),
+    [
+        ("4", "pinned-session", None),
+        ("5", "pinned-session", "did not bind the promoted"),
+        ("4", "different-session", "did not execute the promoted"),
+    ],
+)
+async def test_foundry_client_isolates_promoted_version(
+    monkeypatch, session_version, response_session, error
+):
+    class Token:
+        token = "managed-identity-token"
+
+    class Credential:
+        def get_token(self, _scope):
+            return Token()
+
+        def close(self):
+            pass
+
+    class Response:
+        def __init__(self, body, headers=None):
+            self.body = body
+            self.headers = headers or {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return json.dumps(self.body).encode()
+
+    calls = []
+
+    def fake_urlopen(request, *, timeout):
+        assert 0 < timeout <= 10
+        payload = json.loads(request.data)
+        calls.append((request.full_url, payload))
+        if "/endpoint/sessions?" in request.full_url:
+            assert payload == {
+                "version_indicator": {"type": "version_ref", "agent_version": "4"}
+            }
+            return Response({
+                "agent_session_id": "pinned-session",
+                "version_indicator": {
+                    "type": "version_ref",
+                    "agent_version": session_version,
+                },
+                "status": "active",
+            })
+        assert payload["agent_session_id"] == "pinned-session"
+        assert payload["background"] is True
+        return Response(
+            {"id": "pinned-response", "status": "in_progress"},
+            {"x-agent-session-id": response_session},
+        )
+
+    monkeypatch.setattr(
+        "app.common.foundry_responses.DefaultAzureCredential", lambda: Credential()
+    )
+    monkeypatch.setattr("app.common.foundry_responses.urllib.request.urlopen", fake_urlopen)
+    client = FoundryResponsesClient(
+        project_endpoint="https://example.services.ai.azure.com/api/projects/test",
+        api_version="v1",
+        timeout_seconds=10,
+        agent_version="4",
+    )
+    if error is not None:
+        with pytest.raises(FoundryInvocationError, match=error):
+            await client.start_background(agent_name="contracts", prompt="Read only.")
+    else:
+        result = await client.start_background(agent_name="contracts", prompt="Read only.")
+        assert result.response_id == "pinned-response"
+        assert len(calls) == 2
+    if session_version != "4":
+        assert len(calls) == 1
+
+
+@pytest.mark.parametrize("version", ["latest", "0", "-1", "", "4/5"])
+def test_foundry_client_rejects_nonexplicit_promoted_version(version):
+    with pytest.raises(ValueError, match="positive numeric"):
+        FoundryResponsesClient(
+            project_endpoint="https://example.services.ai.azure.com/api/projects/test",
+            api_version="v1",
+            timeout_seconds=10,
+            agent_version=version,
+        )
+
+
 @pytest.fixture
 async def trigger_client():
     settings = Settings(

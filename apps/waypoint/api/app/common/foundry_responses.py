@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -34,10 +36,60 @@ class FoundryResponsesClient:
         project_endpoint: str,
         api_version: str,
         timeout_seconds: float,
+        agent_version: str | None = None,
     ) -> None:
         self.project_endpoint = project_endpoint.rstrip("/")
         self.api_version = api_version
         self.timeout_seconds = timeout_seconds
+        if agent_version is not None and not re.fullmatch(r"[1-9][0-9]*", agent_version):
+            raise ValueError("A promoted agent version must be a positive numeric version.")
+        self.agent_version = agent_version
+
+    def _create_pinned_session(self, *, agent_name: str, headers: dict[str, str]) -> str:
+        deadline = time.monotonic() + self.timeout_seconds
+        endpoint = (
+            f"{self.project_endpoint}/agents/{quote(agent_name, safe='')}/endpoint/sessions"
+            "?api-version=v1"
+        )
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps({
+                "version_indicator": {
+                    "type": "version_ref",
+                    "agent_version": self.agent_version,
+                },
+            }).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise FoundryInvocationError("The promoted agent session did not become available.")
+            with urllib.request.urlopen(request, timeout=remaining) as response:
+                session = json.loads(response.read().decode("utf-8-sig"))
+            if not isinstance(session, dict):
+                raise FoundryInvocationError("Foundry returned an invalid promoted session.")
+            session_id = session.get("agent_session_id")
+            indicator = session.get("version_indicator")
+            if (
+                not isinstance(session_id, str)
+                or not session_id
+                or not isinstance(indicator, dict)
+                or indicator.get("type") != "version_ref"
+                or indicator.get("agent_version") != self.agent_version
+            ):
+                raise FoundryInvocationError("Foundry did not bind the promoted agent version.")
+            if session.get("status") in {"active", "idle"}:
+                return session_id
+            if session.get("status") not in {"creating", "updating"}:
+                raise FoundryInvocationError("The promoted agent session is unavailable.")
+            time.sleep(min(1, max(0, deadline - time.monotonic())))
+            request = urllib.request.Request(
+                f"{endpoint.split('?', 1)[0]}/{quote(session_id, safe='')}?api-version=v1",
+                headers=headers,
+                method="GET",
+            )
 
     async def start_background(self, *, agent_name: str, prompt: str) -> HostedResponseStart:
         return await asyncio.to_thread(
@@ -66,15 +118,29 @@ class FoundryResponsesClient:
                 "Accept": "application/json",
             }
             inject(headers)
+            payload: dict[str, str | bool] = {
+                "input": prompt,
+                "store": True,
+                "background": True,
+            }
+            if self.agent_version is not None:
+                payload["agent_session_id"] = self._create_pinned_session(
+                    agent_name=agent_name,
+                    headers=headers,
+                )
             request = urllib.request.Request(
                 endpoint,
-                data=json.dumps({"input": prompt, "store": True, "background": True}).encode(
-                    "utf-8"
-                ),
+                data=json.dumps(payload).encode("utf-8"),
                 headers=headers,
                 method="POST",
             )
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                if self.agent_version is not None and response.headers.get(
+                    "x-agent-session-id"
+                ) != payload["agent_session_id"]:
+                    raise FoundryInvocationError(
+                        "Foundry did not execute the promoted agent session."
+                    )
                 body = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             raise FoundryInvocationError(

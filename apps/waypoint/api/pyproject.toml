@@ -17,6 +17,7 @@ dependencies = [
   "opentelemetry-sdk>=1.28.0",
   "opentelemetry-exporter-otlp-proto-grpc>=1.28.0",
   "opentelemetry-instrumentation-fastapi>=0.49b0",
+  "azure-monitor-opentelemetry-exporter>=1.0.0b45,<2.0.0",
   # Azure storage/identity are required at runtime for OneLake corpus reads and
   # Azure Blob seed delivery, so they ship in the base dependency set.
   "azure-identity>=1.19.0",
