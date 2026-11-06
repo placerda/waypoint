@@ -1,0 +1,60 @@
+# Caldova private application release
+
+The manually dispatched `caldova-release.yml` workflow releases the application
+agent, not the landing-zone foundation. It builds from an exact Git archive on
+the existing private ACR pool, creates a candidate version, evaluates that exact
+version and digest, and only then changes the API's promoted version.
+
+The source fork is public. Only synthetic cases and non-secret configuration
+belong here. "Private" describes the Azure network and executor, not repository
+visibility. Never commit credentials, real business documents or runtime exports.
+
+The API must first run the session-aware transport with
+`APP_FOUNDRY_ORCHESTRATOR_AGENT_VERSION` set to the current numeric version and
+`APP_FOUNDRY_RESPONSES_API_VERSION=v1`. A newer hosted version is not isolated by
+calling the unversioned endpoint alone. Every release evaluation creates a
+version-ref session and sends its ID in the Responses **request body**. The
+returned session ID must match. Production uses the same mechanism.
+
+## Real quality gate
+
+Three versioned, read-only cases cover the known discrepancy, the separate
+base-capacity line and an unavailable invoice. A structured `gpt-6.1-sol` judge
+accessed only through the private AI gateway scores business accuracy, grounding,
+governance and instruction adherence. Every score must be at least 4 out of 5.
+Missing results, invocation errors, incomplete responses and missing rationales
+fail the release.
+
+Native Foundry evaluations execute Python threshold graders over the actual
+agent responses and APIM judge scores. The Foundry report retains responses,
+expected behavior and reasons. These are explicit custom evaluators, not
+server-side built-in quality judges. This SDK/manual fallback is used because
+the Azure MCP transport was unavailable. It does not bypass the AI gateway.
+The native run must complete and pass every case before promotion.
+The unrelated Agent Optimizer `eval.yaml` is not executed by this workflow.
+This release uses the dataset and explicit rubric in this directory.
+
+Success and failure receipts are retained as Actions artifacts. They identify
+source commit, immutable image, candidate version, native evaluation and report.
+The deployment step rechecks all identifiers and the unchanged active baseline.
+It does not rebuild or silently select `latest`.
+
+## Private execution and identity
+
+Only `placerda` can dispatch the trusted `caldova-private-invoice` branch.
+The `caldova-private` GitHub environment restricts deployment to that exact
+branch. Its Azure variables are the existing runner identity client ID, tenant
+and subscription. Its federated credential has subject
+`repo:placerda/waypoint:environment:caldova-private`.
+
+The private VM runs a single-job ephemeral runner with a unique dispatch label.
+Do not install it as a persistent service or approve untrusted pull requests for
+this executor. Require approval for all external fork contributors. The VM's
+firewall permits only reviewed outbound GitHub HTTPS destinations, not inbound
+public access. No interactive Azure login or long-lived client secret is copied
+to the VM. Azure authentication comes from the job's OIDC token.
+
+After a successful promotion, record the accepted version, source commit and
+digest in `app-definition.json` before any later native application deployment.
+Infrastructure updates, including gateway policies, remain a separately reviewed
+prepare, validate and deploy operation. They are not reprovisioned per release.

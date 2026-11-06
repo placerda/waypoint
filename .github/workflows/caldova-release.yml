@@ -1,0 +1,78 @@
+name: Caldova private agent release
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Unique label of the single-use private executor
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: caldova-private-agent-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate the reviewed application source
+    if: github.actor == 'placerda' && github.ref == 'refs/heads/caldova-private-invoice'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.23"
+      - name: Check API transport, privacy and telemetry regressions
+        working-directory: apps/waypoint/api
+        run: uv run --python 3.13 --frozen pytest tests/test_assurance_runs.py tests/test_telemetry.py tests/test_private_application.py tests/test_app_simplification.py -q
+      - name: Check fail-closed release gates
+        run: uv run --no-project --python 3.13 --with-requirements tools/deploy/caldova/requirements.txt python -m unittest discover -s tools/deploy/caldova -p test_release.py
+
+  release:
+    name: Build, evaluate and promote the same candidate
+    needs: validate
+    if: github.actor == 'placerda' && github.ref == 'refs/heads/caldova-private-invoice'
+    runs-on: [self-hosted, Linux, X64, "${{ inputs.runner_label }}"]
+    environment: caldova-private
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_PYTHON: .venv-caldova-release/bin/python
+      PROOF: .artifacts/caldova-release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Prepare the isolated release tools
+        run: |
+          python3 -m venv .venv-caldova-release
+          .venv-caldova-release/bin/pip install --disable-pip-version-check -r tools/deploy/caldova/requirements.txt
+      - name: Authenticate to Azure using environment-scoped OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Build one immutable candidate on the private ACR pool
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py build --receipt "$PROOF/build.json"
+      - name: Create a candidate without moving the active application version
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py candidate --build "$PROOF/build.json" --receipt "$PROOF/candidate.json"
+      - name: Run blocking real-agent evaluations through the AI gateway
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py evaluate --candidate "$PROOF/candidate.json" --receipt "$PROOF/evaluation.json"
+      - name: Promote only the exact evaluated version and digest
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py promote --candidate "$PROOF/candidate.json" --evaluation "$PROOF/evaluation.json" --receipt "$PROOF/promotion.json"
+      - name: Preserve success or failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: caldova-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .artifacts/caldova-release/
+          if-no-files-found: warn
+          retention-days: 7
