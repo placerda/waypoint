@@ -230,16 +230,18 @@ agent → Waypoint API. APIM must preserve it toward the separate model backend.
 
 The original KB-side LLM-through-APIM route is **officially unsupported**, not
 merely untested. The approved alternative is a native **minimal/extractive**
-FoundryIQ knowledge base using GA Search API `2026-04-01`, with no KB `models`,
+FoundryIQ knowledge base with no KB `models`,
 query-planning LLM or answer-synthesis deployment. Do not deploy a synthesis
 model or grant Search a direct model-account role for KB reasoning.
 The single Castia agent performs analysis and synthesis through APIM only.
 
-KB management and the MCP wire protocol have different supported versions.
-Private-service probes reject MCP `2026-04-01` with HTTP 400 and successfully
-discover the tool using `2026-08-01-preview`. Set that preview wire version on
-both the project connection target and toolbox server URL. GA KB management
-does not make the MCP integration GA. This compatibility correction does not
+Knowledge sources and basic intent-based REST retrieval use GA `2026-04-01`.
+Explicit `outputMode=extractiveData` and `retrievalReasoningEffort.kind=minimal`
+KB configuration uses `2026-08-01-preview`, independently of the source API.
+Private-service probes reject MCP `2026-04-01` with HTTP 400. Discovery and
+retrieval succeed using `2026-08-01-preview`. Set that preview wire version on
+both the project connection target and toolbox server URL. This is not an
+entirely GA integration. This compatibility correction does not
 enable KB-side model inference or open public network access.
 
 This preserves real knowledge sources, semantic ranking, supported

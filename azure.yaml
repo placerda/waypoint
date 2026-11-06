@@ -5,6 +5,7 @@ name: caldova-waypoint
 services:
   web:
     project: ./apps/waypoint/web
+    image: ${AZURE_CONTAINER_REGISTRY_ENDPOINT}/agent-landing-zone/custom/web
     host: containerapp
     language: docker
     docker:
@@ -12,6 +13,7 @@ services:
       context: .
   api:
     project: ./apps/waypoint/api
+    image: ${AZURE_CONTAINER_REGISTRY_ENDPOINT}/agent-landing-zone/custom/api
     host: containerapp
     language: docker
     docker:
@@ -19,6 +21,7 @@ services:
       context: .
   contract-agent:
     project: ./modules/agents/contract-agent
+    image: ${AZURE_CONTAINER_REGISTRY_ENDPOINT}/agent-landing-zone/custom/contract-agent
     host: azure.ai.agent
     language: docker
     kind: hosted
