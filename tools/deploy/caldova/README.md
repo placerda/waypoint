@@ -1,9 +1,11 @@
 # Caldova private application release
 
 The manually dispatched `caldova-release.yml` workflow releases the application
-agent, not the landing-zone foundation. It builds from an exact Git archive on
-the existing private ACR pool, creates a candidate version, evaluates that exact
-version and digest, and only then changes the API's promoted version.
+agent and its matching web application, not the landing-zone foundation.
+It builds from an exact Git archive on the existing private ACR pool,
+creates a candidate version, evaluates that exact
+version and digest, and only then builds and publishes the matching web image
+before changing the API's promoted version.
 
 The source fork is public. Only synthetic cases and non-secret configuration
 belong here. "Private" describes the Azure network and executor, not repository
@@ -70,6 +72,28 @@ Success and failure receipts are retained as Actions artifacts. They identify
 source commit, immutable image, candidate version, native evaluation and report.
 The deployment step rechecks all identifiers and the unchanged active baseline.
 It does not rebuild or silently select `latest`.
+
+## Coordinated web publication
+
+Only a completed native run with total 3, passed 3, failed 0 and errored 0
+allows the matching web image to be built. Promotion requires that successful
+web build receipt, the same source commit, the expected private repository and
+an immutable digest. The API image is unchanged because this release does not
+change its source code. Authentication configuration is preserved.
+
+The existing single-revision web application is updated first. Its new
+revision must be ready, its root must return 200 and anonymous invoice access
+must return 401 before the API can move to the evaluated agent version.
+The web supports both recorded legacy evidence and new retrieval provenance.
+The API must then become ready, pass health and anonymous-denial checks, and
+retain the exact selected version while the matching web digest remains active.
+
+If publication fails, the release fails. Recovery restores a pin or web image
+changed by this attempt to its recorded baseline and checks readiness and
+anonymous denial again. It refuses to overwrite an unrelated concurrent pin
+or image change. A recovery failure remains visible in the failed receipt and
+requires operator intervention. No accepted source pin is updated on failure.
+Source-only validation does not exercise Azure rollout or recovery.
 
 ## Private execution and identity
 

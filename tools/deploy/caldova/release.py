@@ -30,6 +30,7 @@ GATEWAY = "https://apim-caldova-cus-01.azure-api.net/openai/v1"
 SUBSCRIPTION = "9788a92c-2f71-4629-8173-7ad449cb50e1"
 APP_GROUP = "rg-caldova-waypoint-app-cus-01"
 API = "ca-caldova-waypoint-api-cus-01"
+WEB = "ca-caldova-waypoint-web-cus-01"
 REGISTRY = "crcaldovacus01"
 AGENT = "contract-agent"
 DIMENSIONS = ("business_accuracy", "grounding", "governance", "instruction_adherence")
@@ -77,7 +78,10 @@ def active_version() -> str:
 
 
 def build(args, proof: dict) -> None:
-    paths = {"api": "apps/waypoint/api", "contract-agent": "modules/agents/contract-agent"}
+    paths = {
+        "api": "apps/waypoint/api", "web": "apps/waypoint/web",
+        "contract-agent": "modules/agents/contract-agent",
+    }
     source = command("git", "rev-parse", "HEAD")
     expected = os.environ.get("GITHUB_SHA", source)
     if source != expected or command("git", "status", "--porcelain", "--untracked-files=no"):
@@ -94,6 +98,7 @@ def build(args, proof: dict) -> None:
         queued = az(
             "acr", "build", "--registry", REGISTRY, "--agent-pool", "privatebuild",
             "--image", f"{repository}:{tag}", "--file", str(Path(directory) / "Dockerfile"), directory,
+            *(("--build-arg", f"BUILD_VERSION={source[:12]}") if args.component == "web" else ()),
             "--no-logs",
         )
     run_id = queued.get("runId")
@@ -334,6 +339,50 @@ def evaluate(args, proof: dict, client, credential) -> None:
     proof["status"] = "passed"
 
 
+def application_image(app: dict) -> str:
+    if app["properties"]["configuration"]["activeRevisionsMode"] != "Single":
+        raise RuntimeError("Coordinated promotion requires the existing single-revision application mode.")
+    containers = app["properties"]["template"]["containers"]
+    if len(containers) != 1:
+        raise RuntimeError("The live application container inventory changed.")
+    image = containers[0]["image"]
+    if not isinstance(image, str) or not re.fullmatch(
+        re.escape(REGISTRY) + r"\.azurecr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}", image,
+    ):
+        raise RuntimeError("The application baseline must use an immutable image from the private registry.")
+    return image
+
+
+def wait_for_application(name: str, image: str, health_path: str) -> str:
+    deadline = time.monotonic() + 180
+    last_result = "revision not ready"
+    while time.monotonic() < deadline:
+        app = az("containerapp", "show", "--resource-group", APP_GROUP, "--name", name)
+        properties = app["properties"]
+        if application_image(app) != image:
+            raise RuntimeError("The application image changed during coordinated promotion.")
+        if (
+            properties.get("latestRevisionName")
+            and properties["latestRevisionName"] == properties.get("latestReadyRevisionName")
+        ):
+            endpoint = "https://" + properties["configuration"]["ingress"]["fqdn"]
+            try:
+                response = requests.get(endpoint + health_path, timeout=15, allow_redirects=False)
+            except requests.RequestException as error:
+                last_result = type(error).__name__
+            else:
+                last_result = f"HTTP {response.status_code}"
+                if response.status_code == 200:
+                    return endpoint
+        time.sleep(5)
+    raise TimeoutError(f"{name} did not become ready and healthy: {last_result}.")
+
+
+def verify_anonymous_denial(endpoint: str) -> None:
+    if requests.get(endpoint + "/api/invoices", timeout=15, allow_redirects=False).status_code != 401:
+        raise RuntimeError("The published application did not preserve authenticated invoice access.")
+
+
 def promote(args, proof: dict, client) -> None:
     selected, quality = read(args.candidate), read(args.evaluation)
     if selected.get("status") != "candidate" or quality.get("status") != "passed":
@@ -341,27 +390,78 @@ def promote(args, proof: dict, client) -> None:
     for key in ("image", "sourceSha", "candidateVersion", "previousVersion"):
         if selected.get(key) != quality.get(key):
             raise RuntimeError("The quality approval belongs to a different candidate.")
+    counts = quality.get("resultCounts")
+    expected_counts = {"total": 3, "passed": 3, "failed": 0, "errored": 0}
+    if (
+        quality.get("nativeRunStatus") != "completed"
+        or "reportUrl" not in quality
+        or not isinstance(counts, dict)
+        or any(type(counts.get(key)) is not int or counts[key] != value for key, value in expected_counts.items())
+        or any(not isinstance(quality.get(key), str) or not quality[key].strip()
+               for key in ("evaluationId", "evaluationRunId"))
+    ):
+        raise RuntimeError("Completed native evaluation with all three cases passing is required.")
     verify_candidate(client, selected)
     if active_version() != selected["previousVersion"]:
         raise RuntimeError("The active baseline changed. Refusing concurrent promotion.")
-    az(
-        "containerapp", "update", "--name", API, "--resource-group", APP_GROUP,
-        "--set-env-vars", f"APP_FOUNDRY_ORCHESTRATOR_AGENT_VERSION={selected['candidateVersion']}",
-    )
-    if active_version() != selected["candidateVersion"]:
-        raise RuntimeError("The selected candidate was not promoted.")
-    app = az("containerapp", "show", "--resource-group", APP_GROUP, "--name", API)
-    endpoint = "https://" + app["properties"]["configuration"]["ingress"]["fqdn"]
-    deadline = time.monotonic() + 180
-    while time.monotonic() < deadline:
-        response = requests.get(endpoint + "/health", timeout=15)
-        if response.status_code == 200:
-            break
-        time.sleep(5)
-    else:
-        raise RuntimeError("The promoted API did not become healthy.")
-    if requests.get(endpoint + "/api/invoices", timeout=15).status_code != 401:
-        raise RuntimeError("The promoted API did not preserve authenticated invoice access.")
+    web = read(args.web_build)
+    if (
+        web.get("status") != "built" or web.get("component") != "web"
+        or web.get("sourceSha") != selected["sourceSha"]
+        or not isinstance(web.get("acrRunId"), str) or not web["acrRunId"].strip()
+        or not isinstance(web.get("image"), str)
+        or not re.fullmatch(
+            re.escape(REGISTRY) + r"\.azurecr\.io/agent-landing-zone/custom/web@sha256:[0-9a-f]{64}",
+            web["image"],
+        )
+    ):
+        raise RuntimeError("A verified immutable web build from the evaluated source is required.")
+    previous_web = application_image(az("containerapp", "show", "--resource-group", APP_GROUP, "--name", WEB))
+    api_image = application_image(az("containerapp", "show", "--resource-group", APP_GROUP, "--name", API))
+    proof.update(webImage=web["image"], previousWebImage=previous_web, webBuildRunId=web["acrRunId"])
+    api_update_attempted = False
+    try:
+        az("containerapp", "update", "--name", WEB, "--resource-group", APP_GROUP, "--image", web["image"])
+        web_endpoint = wait_for_application(WEB, web["image"], "/")
+        verify_anonymous_denial(web_endpoint)
+        if active_version() != selected["previousVersion"]:
+            raise RuntimeError("The active baseline changed during web publication.")
+        if application_image(az("containerapp", "show", "--resource-group", APP_GROUP, "--name", API)) != api_image:
+            raise RuntimeError("The API image changed during web publication.")
+        api_update_attempted = True
+        az(
+            "containerapp", "update", "--name", API, "--resource-group", APP_GROUP,
+            "--set-env-vars", f"APP_FOUNDRY_ORCHESTRATOR_AGENT_VERSION={selected['candidateVersion']}",
+        )
+        endpoint = wait_for_application(API, api_image, "/health")
+        verify_anonymous_denial(endpoint)
+        if active_version() != selected["candidateVersion"]:
+            raise RuntimeError("The selected candidate was not promoted.")
+        if application_image(az("containerapp", "show", "--resource-group", APP_GROUP, "--name", WEB)) != web["image"]:
+            raise RuntimeError("The published web image changed before promotion completed.")
+    except (RuntimeError, ValueError, KeyError, TimeoutError, requests.RequestException):
+        proof["recoveryStatus"] = "failed"
+        current = active_version()
+        if application_image(az("containerapp", "show", "--resource-group", APP_GROUP, "--name", API)) != api_image:
+            raise RuntimeError("The API image changed concurrently. Manual recovery is required.")
+        if current == selected["candidateVersion"] and api_update_attempted:
+            az(
+                "containerapp", "update", "--name", API, "--resource-group", APP_GROUP,
+                "--set-env-vars", f"APP_FOUNDRY_ORCHESTRATOR_AGENT_VERSION={selected['previousVersion']}",
+            )
+            verify_anonymous_denial(wait_for_application(API, api_image, "/health"))
+            if active_version() != selected["previousVersion"]:
+                raise RuntimeError("The previous API pin was not restored.")
+        elif current != selected["previousVersion"]:
+            raise RuntimeError("The API pin changed concurrently. Manual recovery is required.")
+        current_web = application_image(az("containerapp", "show", "--resource-group", APP_GROUP, "--name", WEB))
+        if current_web == web["image"]:
+            az("containerapp", "update", "--name", WEB, "--resource-group", APP_GROUP, "--image", previous_web)
+            verify_anonymous_denial(wait_for_application(WEB, previous_web, "/"))
+        elif current_web != previous_web:
+            raise RuntimeError("The web image changed concurrently. Manual recovery is required.")
+        proof["recoveryStatus"] = "restored"
+        raise
     proof.update(
         status="promoted", sourceSha=selected["sourceSha"], image=selected["image"],
         candidateVersion=selected["candidateVersion"], previousVersion=selected["previousVersion"],
@@ -373,13 +473,17 @@ def promote(args, proof: dict, client) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("stage", choices=("build", "candidate", "evaluate", "promote"))
-    parser.add_argument("--component", choices=("api", "contract-agent"), default="contract-agent")
+    parser.add_argument("--component", choices=("api", "web", "contract-agent"), default="contract-agent")
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--build", type=Path)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--evaluation", type=Path)
+    parser.add_argument("--web-build", type=Path)
     args = parser.parse_args()
-    required = {"candidate": ("build",), "evaluate": ("candidate",), "promote": ("candidate", "evaluation")}
+    required = {
+        "candidate": ("build",), "evaluate": ("candidate",),
+        "promote": ("candidate", "evaluation", "web_build"),
+    }
     for name in required.get(args.stage, ()):
         if getattr(args, name) is None:
             parser.error(f"{args.stage} requires --{name}")
@@ -407,7 +511,10 @@ def main() -> None:
         if summary:
             with Path(summary).open("a", encoding="utf-8") as output:
                 output.write(f"### {args.stage}: {proof['status']}\n\n")
-                for key in ("sourceSha", "image", "candidateVersion", "evaluationRunId", "reportUrl"):
+                for key in (
+                    "sourceSha", "image", "webImage", "previousWebImage", "candidateVersion",
+                    "evaluationRunId", "reportUrl", "recoveryStatus",
+                ):
                     if proof.get(key):
                         output.write(f"- {key}: {proof[key]}\n")
                 output.write("\n")

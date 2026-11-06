@@ -87,8 +87,10 @@ jobs:
         run: $RELEASE_PYTHON tools/deploy/caldova/release.py candidate --build "$PROOF/build.json" --receipt "$PROOF/candidate.json"
       - name: Run blocking real-agent evaluations through the AI gateway
         run: $RELEASE_PYTHON tools/deploy/caldova/release.py evaluate --candidate "$PROOF/candidate.json" --receipt "$PROOF/evaluation.json"
-      - name: Promote only the exact evaluated version and digest
-        run: $RELEASE_PYTHON tools/deploy/caldova/release.py promote --candidate "$PROOF/candidate.json" --evaluation "$PROOF/evaluation.json" --receipt "$PROOF/promotion.json"
+      - name: Build the matching immutable web image only after native approval
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py build --component web --receipt "$PROOF/web-build.json"
+      - name: Publish the matching web and promote only the evaluated agent
+        run: $RELEASE_PYTHON tools/deploy/caldova/release.py promote --candidate "$PROOF/candidate.json" --evaluation "$PROOF/evaluation.json" --web-build "$PROOF/web-build.json" --receipt "$PROOF/promotion.json"
       - name: Preserve success or failure evidence
         if: always()
         uses: actions/upload-artifact@v4
