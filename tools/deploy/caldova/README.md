@@ -15,6 +15,10 @@ The API must first run the session-aware transport with
 calling the unversioned endpoint alone. Every release evaluation creates a
 version-ref session and sends its ID in the Responses **request body**. The
 returned session ID must match. Production uses the same mechanism.
+Creating a hosted version is asynchronous. Session creation waits up to ten
+minutes only for the explicit `agent_version_not_ready` response. Other startup
+errors fail immediately. A provisioning timeout cannot bypass evaluation or
+promote a different version.
 
 ## Real quality gate
 

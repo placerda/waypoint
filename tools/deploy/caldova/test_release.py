@@ -71,6 +71,58 @@ class ReleaseGates(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     release.verify_candidate(client, selected)
 
+    def test_candidate_session_waits_only_for_provisioning(self):
+        error = release.HttpResponseError("Agent is provisioning.")
+        error.error = SimpleNamespace(code="agent_version_not_ready")
+        session = SimpleNamespace(
+            status="active", agent_session_id="candidate-session",
+            version_indicator=SimpleNamespace(agent_version="5"),
+        )
+        client = Mock()
+        client.agents.create_session.side_effect = [error, session]
+        response = Mock()
+        response.headers = {
+            "x-agent-session-id": "candidate-session", "content-type": "application/json",
+        }
+        response.json.return_value = {
+            "id": "actual-response", "status": "completed", "output_text": "Grounded answer.",
+        }
+        credential = Mock()
+        credential.get_token.return_value.token = "synthetic-token"
+        with patch.object(release.time, "sleep") as sleep, patch.object(
+            release.requests, "post", return_value=response,
+        ) as post:
+            result = release.invoke(client, credential, "5", "Read-only question.")
+        sleep.assert_called_once_with(10)
+        self.assertEqual(client.agents.create_session.call_count, 2)
+        for call in client.agents.create_session.call_args_list:
+            self.assertEqual(call.kwargs["version_indicator"].agent_version, "5")
+        self.assertEqual(post.call_args.kwargs["json"]["agent_session_id"], "candidate-session")
+        self.assertEqual(result["response_id"], "actual-response")
+
+    def test_non_provisioning_session_errors_are_not_retried(self):
+        error = release.HttpResponseError("Access denied.")
+        error.error = SimpleNamespace(code="Forbidden")
+        client = Mock()
+        client.agents.create_session.side_effect = error
+        with patch.object(release.time, "sleep") as sleep:
+            with self.assertRaises(release.HttpResponseError):
+                release.invoke(client, Mock(), "5", "Read-only question.")
+        sleep.assert_not_called()
+        client.agents.create_session.assert_called_once()
+
+    def test_candidate_provisioning_wait_is_bounded(self):
+        error = release.HttpResponseError("Agent is provisioning.")
+        error.error = SimpleNamespace(code="agent_version_not_ready")
+        client = Mock()
+        client.agents.create_session.side_effect = error
+        with patch.object(release.time, "monotonic", side_effect=[100, 701]), patch.object(
+            release.time, "sleep",
+        ) as sleep:
+            with self.assertRaises(TimeoutError):
+                release.invoke(client, Mock(), "5", "Read-only question.")
+        sleep.assert_not_called()
+
     def test_failed_or_missing_quality_cannot_promote(self):
         for status in ("failed", "candidate", None):
             selected = self.candidate()

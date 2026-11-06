@@ -19,6 +19,7 @@ import time
 
 from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import VersionRefIndicator
+from azure.core.exceptions import HttpResponseError
 from azure.identity import AzureCliCredential, get_bearer_token_provider
 from openai import OpenAI
 import requests
@@ -153,9 +154,21 @@ def candidate(args, proof: dict, client) -> None:
 
 
 def invoke(client, credential, version: str, query: str) -> dict:
-    session = client.agents.create_session(
-        AGENT, version_indicator=VersionRefIndicator(agent_version=version),
-    )
+    readiness_deadline = time.monotonic() + 600
+    while True:
+        try:
+            session = client.agents.create_session(
+                AGENT, version_indicator=VersionRefIndicator(agent_version=version),
+            )
+            break
+        except HttpResponseError as exc:
+            if not exc.error or exc.error.code != "agent_version_not_ready":
+                raise
+            if time.monotonic() >= readiness_deadline:
+                raise TimeoutError(
+                    f"Candidate version {version} did not finish provisioning within 10 minutes."
+                ) from exc
+            time.sleep(10)
     deadline = time.monotonic() + 180
     while session.status in {"creating", "updating"} and time.monotonic() < deadline:
         time.sleep(2)
