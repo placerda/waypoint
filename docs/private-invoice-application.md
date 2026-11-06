@@ -93,7 +93,7 @@ not empty/default production endpoints.
 | Agent project | `FOUNDRY_PROJECT_ENDPOINT` = new agent project `/api/projects/<project>` endpoint, with **no model deployments** |
 | Agent model | `AZURE_AI_MODEL_DEPLOYMENT_NAME` = deployment in the separate model account; `WAYPOINT_GATEWAY_BASE_URL` = private-reachable APIM HTTPS `/openai/v1/`; `WAYPOINT_GATEWAY_SCOPE=https://cognitiveservices.azure.com/.default` |
 | Agent tools | `WAYPOINT_API_BASE_URL` = new private API HTTPS URL; `WAYPOINT_API_SCOPE` = API application ID URI + `/.default` |
-| FoundryIQ | `TOOLBOX_NAME=contract-toolbox`; `TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT` = new private project toolbox MCP URL; `WAYPOINT_KB_TOOL_NAME` = actual published KB retrieve tool name; `WAYPOINT_KB_MCP_ENDPOINT` = upstream native Search `/knowledgebases/<kb>/mcp?api-version=2026-04-01` URL; `WAYPOINT_FOUNDRYIQ_RETRIEVAL_MODE=minimal-extractive`; `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=false` until accepted |
+| FoundryIQ | `TOOLBOX_NAME=contract-toolbox`; `TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT` = new private project toolbox MCP URL; `WAYPOINT_KB_TOOL_NAME` = actual published KB retrieve tool name; `WAYPOINT_KB_MCP_ENDPOINT` = upstream native Search `/knowledgebases/<kb>/mcp?api-version=2026-08-01-preview` URL; `WAYPOINT_FOUNDRYIQ_RETRIEVAL_MODE=minimal-extractive`; `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=false` until accepted |
 | Telemetry | Foundation-managed OTel/Application Insights settings; content recording is not enabled by this adaptation |
 
 The native API supports delegated-user tokens and explicit managed-identity
@@ -235,6 +235,13 @@ query-planning LLM or answer-synthesis deployment. Do not deploy a synthesis
 model or grant Search a direct model-account role for KB reasoning.
 The single Castia agent performs analysis and synthesis through APIM only.
 
+KB management and the MCP wire protocol have different supported versions.
+Private-service probes reject MCP `2026-04-01` with HTTP 400 and successfully
+discover the tool using `2026-08-01-preview`. Set that preview wire version on
+both the project connection target and toolbox server URL. GA KB management
+does not make the MCP integration GA. This compatibility correction does not
+enable KB-side model inference or open public network access.
+
 This preserves real knowledge sources, semantic ranking, supported
 semantic/vector retrieval, source attribution and native MCP. It does **not**
 provide automatic KB-side question decomposition, iterative planning or a
@@ -248,6 +255,13 @@ ingests the original Markdown as deterministic source-attributed text chunks;
 no separate local retrieval engine is introduced. Vectorization remains a
 future explicitly configured capability, not a feature claimed by this build.
 
+The three synthetic documents are explicitly shared within this application,
+not a per-user permission-trimming demonstration. Their indexed ACL metadata
+uses the documented `userIds=["all"]` shared-document marker. Index permission
+filtering stays enabled. Search RBAC, private endpoints and application Entra
+authorization still control access. Do not copy this marker to protected
+customer corpora or infer it from service-identity authentication alone.
+
 Native GA REST retrieval accepts only the following input shape for a basic
 semantic request (the typed `knowledge.minimal_retrieve_request` helper is
 available for acceptance probes, not used as a replacement runtime retriever):
@@ -260,7 +274,7 @@ Do not send preview `messages`, `outputMode` or `retrievalReasoningEffort`
 fields to that GA endpoint. MCP has a **separate server-discovered input
 schema**; this application deliberately removes the old guessed `query`
 parameter guidance and leaves the published tool schema untouched. Inspect
-the actual GA `tools/list` schema during acceptance. The remote MCP result has
+the actual preview MCP `tools/list` schema during acceptance. The remote MCP result has
 text content containing JSON grounding records (`ref_id`, `title`, content and
 configured source fields), not the REST `references`/`activity` envelope.
 Keep the returned source fields and cite their actual passages; GA does not
@@ -281,7 +295,7 @@ and continuation preservation, not remote-service compatibility. Before setting
    continuation behavior, bearer audience and private network reachability.
 2. The model service can invoke the private project toolbox MCP endpoint with
    the FoundryIQ authorization token and actual published KB tool name.
-3. The actual toolbox connection targets the asserted GA MCP endpoint, its
+3. The actual toolbox connection targets the asserted supported MCP endpoint, its
    discovered tool schema succeeds, and the KB definition has no models.
    There are no KB query-planning/synthesis calls. Any configured embedding
    calls route through APIM to the separate model account. Inspect real
@@ -291,7 +305,7 @@ and continuation preservation, not remote-service compatibility. Before setting
    PostgreSQL, survives API restart, and escalates USD 111,000 without financial
    execution.
 
-If native GA MCP/toolbox compatibility or service-side private networking does
+If native MCP/toolbox compatibility or service-side private networking does
 not support that routing, report the exact incompatibility and keep this gate
 closed. A plain Responses call does not establish FoundryIQ compatibility.
 The application raises an explicit error rather than silently dropping the KB

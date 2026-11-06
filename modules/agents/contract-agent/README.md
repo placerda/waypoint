@@ -26,8 +26,12 @@ uv run --frozen python -m unittest discover -s tests -v
 uv run --frozen python main.py
 ```
 
-The approved FoundryIQ lane is native GA `2026-04-01` minimal/extractive MCP,
-with no KB models, query planning or answer synthesis. Castia performs reasoning
+The FoundryIQ lane uses GA `2026-04-01` for model-free KB management and
+`2026-08-01-preview` for the separate MCP wire contract. The private service
+rejects GA MCP discovery with HTTP 400. Both the project connection target and
+the toolbox server URL must use the supported MCP version. This is a preview
+MCP dependency, not an entirely GA lane. There are no KB models, query planning
+or answer synthesis. Castia performs reasoning
 and synthesis through APIM. MCP inputs follow the server-discovered schema,
 not an assumed REST `messages` payload. Source grounding records and citations
 remain available; automatic KB-side decomposition is intentionally absent.

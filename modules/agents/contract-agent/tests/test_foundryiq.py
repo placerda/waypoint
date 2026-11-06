@@ -14,7 +14,7 @@ from toolbox import assurance_specs
 
 NATIVE = (
     "https://private.search.windows.net/knowledgebases/contracts/mcp"
-    "?api-version=2026-04-01"
+    "?api-version=2026-08-01-preview"
 )
 
 
@@ -27,7 +27,7 @@ class MinimalFoundryIQTests(unittest.IsolatedAsyncioTestCase):
             minimal_retrieve_request(" ")
         self.assertEqual(validate_minimal_mcp_endpoint(NATIVE), NATIVE)
         for endpoint in (
-            NATIVE.replace("2026-04-01", "2026-08-01-preview"),
+            NATIVE.replace("2026-08-01-preview", "2026-04-01"),
             NATIVE.replace("/mcp?", "/retrieve?"),
             NATIVE.replace("https:", "http:"),
             NATIVE + "&outputMode=answerSynthesis",
@@ -63,6 +63,6 @@ class MinimalFoundryIQTests(unittest.IsolatedAsyncioTestCase):
                 with self.assertRaisesRegex(ValueError, "model-free"):
                     await assurance_specs()
             with patch.dict(os.environ, {"WAYPOINT_KB_MCP_ENDPOINT":
-                                        NATIVE.replace("2026-04-01", "2026-08-01-preview")}):
-                with self.assertRaisesRegex(ValueError, "GA 2026"):
+                                        NATIVE.replace("2026-08-01-preview", "2026-04-01")}):
+                with self.assertRaisesRegex(ValueError, "2026-08-01-preview"):
                     await assurance_specs()

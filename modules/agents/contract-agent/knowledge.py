@@ -6,6 +6,7 @@ from typing import Literal, TypedDict
 from urllib.parse import parse_qs, urlsplit
 
 KB_API_VERSION = "2026-04-01"
+KB_MCP_API_VERSION = "2026-08-01-preview"
 
 
 class SemanticIntent(TypedDict):
@@ -40,7 +41,7 @@ def validate_minimal_mcp_endpoint(endpoint: str) -> str:
         or segments[0] != "knowledgebases"
         or not segments[1]
         or segments[2] != "mcp"
-        or parse_qs(parsed.query, keep_blank_values=True) != {"api-version": [KB_API_VERSION]}
+        or parse_qs(parsed.query, keep_blank_values=True) != {"api-version": [KB_MCP_API_VERSION]}
     ):
-        raise ValueError("FoundryIQ requires a native Search KB MCP endpoint using GA 2026-04-01")
+        raise ValueError("FoundryIQ MCP requires the supported 2026-08-01-preview wire contract")
     return endpoint
