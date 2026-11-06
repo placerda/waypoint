@@ -45,7 +45,10 @@ Only `placerda` can dispatch the trusted `caldova-private-invoice` branch.
 The `caldova-private` GitHub environment restricts deployment to that exact
 branch. Its Azure variables are the existing runner identity client ID, tenant
 and subscription. Its federated credential has subject
-`repo:placerda/waypoint:environment:caldova-private`.
+`repo:placerda@6265211/waypoint@1447365558:environment:caldova-private`.
+This is the actual immutable subject returned by GitHub OIDC, including the
+verified owner and repository IDs. Do not weaken GitHub's immutable-subject
+setting or replace this with the legacy name-only subject.
 
 The private VM runs a single-job ephemeral runner with a unique dispatch label.
 Do not install it as a persistent service or approve untrusted pull requests for
