@@ -1,83 +1,143 @@
-"""Real remote MCP grounding; all query planning and synthesis stay in the agent."""
+"""Execute native Foundry toolbox MCP inside the agent's private network."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import json
 import os
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
-from castia import (
-    apply_optimized_toolbox_tools,
-    resolve_toolbox_endpoint,
-    toolbox_mcp_tool,
-    toolbox_token,
-)
+import httpx
+from castia import toolbox_token
+from castia.inference.tools import Tool
+from opentelemetry.propagate import inject
+
 from gateway import required_env
 from knowledge import validate_minimal_mcp_endpoint
 
-_OPTIMIZER_ENDPOINT = "https://example.invalid/toolboxes/contract-toolbox/mcp?api-version=v1"
-_KB_TOOL_NAME = "contracts-kb-mcp___knowledge_base_retrieve"
-_KB_TOOL_DESCRIPTION = (
-    "Retrieve grounding passages from Caldova's governing contracts and "
-    "billing/quality policies - statements of work, rate cards, and "
-    "release/billability policies. Use for any question about what a supplier's "
-    "contract or a Caldova policy permits, requires, or prohibits: whether a "
-    "fee is billable, rate or threshold lookups, and clause interpretation. "
-    "Returns cited source passages; ground every contractual claim in them and "
-    "never assert a term this tool does not return. This is minimal/extractive "
-    "retrieval, not a KB-generated answer. Follow the actual MCP-discovered "
-    "input schema; do not assume REST messages or invent parameter names. "
-    "Use focused searches naming the supplier and disputed fee, repeat searches "
-    "when needed, and retain grounding ref_id, title and document identifiers."
-)
 
+class NativeToolbox:
+    """BYO toolbox transport following the official raw MCP hosted-agent sample."""
 
-def is_toolbox_configured() -> bool:
-    return resolve_toolbox_endpoint() is not None
+    def __init__(self) -> None:
+        self.endpoint = required_env("TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT")
+        endpoint = urlsplit(self.endpoint)
+        project = urlsplit(required_env("FOUNDRY_PROJECT_ENDPOINT"))
+        prefix = project.path.rstrip("/") + "/toolboxes/"
+        if (
+            endpoint.scheme != "https"
+            or not endpoint.hostname
+            or not endpoint.hostname.endswith(".services.ai.azure.com")
+            or endpoint.netloc != project.netloc
+            or endpoint.username or endpoint.password or endpoint.fragment
+            or not endpoint.path.startswith(prefix)
+            or not endpoint.path.endswith("/mcp")
+            or parse_qs(endpoint.query) != {"api-version": ["v1"]}
+        ):
+            raise ValueError("Native MCP must target a toolbox in the configured Foundry project")
+        self.session_id: str | None = None
+        self.request_id = 0
 
+    async def rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
+        self.request_id += 1
+        request_id = self.request_id
+        headers = {
+            "Authorization": "Bearer " + await toolbox_token(),
+            "Accept": "application/json, text/event-stream",
+            "Foundry-Features": "Toolboxes=V1Preview",
+        }
+        inject(headers)
+        if self.session_id:
+            headers["mcp-session-id"] = self.session_id
+        body: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "params": params}
+        if method != "notifications/initialized":
+            body["id"] = request_id
+        async with httpx.AsyncClient(timeout=120, follow_redirects=False) as client:
+            response = await client.post(self.endpoint, headers=headers, json=body)
+        response.raise_for_status()
+        if response.is_redirect:
+            raise RuntimeError("Toolbox redirects are not accepted")
+        self.session_id = response.headers.get("mcp-session-id", self.session_id)
+        if method == "notifications/initialized":
+            return {}
+        if response.headers.get("content-type", "").startswith("text/event-stream"):
+            messages = [
+                json.loads(line[5:].strip())
+                for line in response.text.splitlines() if line.startswith("data:")
+            ]
+            matches = [
+                item for item in messages
+                if isinstance(item, dict) and item.get("id") == request_id
+            ]
+            if len(matches) != 1:
+                raise RuntimeError("Toolbox SSE has no unique matching JSON-RPC response")
+            payload = matches[0]
+        else:
+            payload = response.json()
+        if not isinstance(payload, dict) or payload.get("id") != request_id:
+            raise RuntimeError("Toolbox returned an invalid JSON-RPC response")
+        if payload.get("error"):
+            raise RuntimeError("Toolbox JSON-RPC error: " + json.dumps(payload["error"]))
+        result = payload.get("result")
+        if not isinstance(result, dict):
+            raise RuntimeError("Toolbox returned no MCP result")
+        if result.get("isError"):
+            raise RuntimeError("Native MCP tool reported an error: " + json.dumps(result))
+        return result
 
-def _foundryiq_spec(
-    endpoint: str, *, token: str | None = None, tool_name: str = _KB_TOOL_NAME
-) -> dict[str, Any]:
-    spec = toolbox_mcp_tool(
-        endpoint,
-        server_label="foundryiq",
-        allowed_tools=(tool_name,),
-        token=token,
-        descriptions={tool_name: _KB_TOOL_DESCRIPTION},
-    )
-    assert spec is not None
-    return spec
+    async def discover(self) -> Tool:
+        await self.rpc("initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "caldova-waypoint", "version": "1.0.0"},
+        })
+        await self.rpc("notifications/initialized", {})
+        result = await self.rpc("tools/list", {})
+        name = required_env("WAYPOINT_KB_TOOL_NAME")
+        tools = result.get("tools")
+        if not isinstance(tools, list):
+            raise RuntimeError("Toolbox discovery returned no tool list")
+        selected = [
+            item for item in tools if isinstance(item, dict) and item.get("name") == name
+        ]
+        if len(selected) != 1 or not isinstance(selected[0].get("inputSchema"), dict):
+            raise RuntimeError("Expected one native knowledge tool with a discovered input schema")
+        tool = selected[0]
 
+        async def invoke(activity: Any, **arguments: Any) -> dict[str, Any]:
+            result = await self.rpc("tools/call", {"name": name, "arguments": arguments})
+            evidence = [
+                json.loads(item["text"])
+                for item in result.get("content", [])
+                if isinstance(item, dict) and item.get("type") == "text"
+            ]
+            passages = [
+                item for value in evidence if isinstance(value, list) for item in value
+                if isinstance(item, dict) and item.get("content")
+            ]
+            references = [
+                value for value in evidence if isinstance(value, dict)
+                and value.get("kind") == "reference" and value.get("ref_id") is not None
+            ]
+            if not passages or not references:
+                raise RuntimeError("Native knowledge MCP returned no grounding and source references")
+            return result
 
-def foundryiq_toolbox_tools() -> list[dict[str, Any]]:
-    """Optimizer-visible baseline for the FoundryIQ MCP tool."""
-    return [_foundryiq_spec(_OPTIMIZER_ENDPOINT)]
-
-
-async def _runtime_foundryiq_spec(
-    tool_definitions: Sequence[dict[str, Any]] = (),
-) -> dict[str, Any] | None:
-    if os.environ.get("WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED", "").lower() != "true":
-        raise RuntimeError(
-            "FoundryIQ minimal MCP/private routing has not been verified"
+        return Tool(
+            name=name,
+            description=tool.get("description", "") + (
+                " Preserve grounding passages, reference IDs and source titles. "
+                "This tool retrieves evidence without KB-side model synthesis."
+            ),
+            parameters=tool["inputSchema"],
+            impl=invoke,
         )
+
+
+async def assurance_tools() -> list[Tool]:
+    if os.environ.get("WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED", "").lower() != "true":
+        raise RuntimeError("FoundryIQ minimal MCP/private routing has not been verified")
     if required_env("WAYPOINT_FOUNDRYIQ_RETRIEVAL_MODE") != "minimal-extractive":
         raise ValueError("Only model-free minimal-extractive FoundryIQ is supported")
     validate_minimal_mcp_endpoint(required_env("WAYPOINT_KB_MCP_ENDPOINT"))
-    endpoint = required_env("TOOLBOX_CONTRACT_TOOLBOX_MCP_ENDPOINT")
-    spec = _foundryiq_spec(
-        endpoint, token=await toolbox_token(), tool_name=required_env("WAYPOINT_KB_TOOL_NAME")
-    )
-    return apply_optimized_toolbox_tools(spec, list(tool_definitions))
-
-
-async def read_specs(tool_definitions: Sequence[dict[str, Any]] = ()) -> list[dict[str, Any]]:
-    spec = await _runtime_foundryiq_spec(tool_definitions)
-    return [spec] if spec else []
-
-
-async def assurance_specs(
-    tool_definitions: Sequence[dict[str, Any]] = (),
-) -> list[dict[str, Any]]:
-    return await read_specs(tool_definitions)
+    return [await NativeToolbox().discover()]

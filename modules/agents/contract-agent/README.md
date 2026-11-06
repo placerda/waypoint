@@ -5,6 +5,14 @@ Only the Foundry `responses` protocol is exposed. Structured evidence comes
 from the private Waypoint API; the only mutating tool is `record_assurance`.
 It creates cases, runs, recommendations and optional drafts, never payments.
 
+The agent executes native Foundry toolbox MCP inside its private network.
+It discovers the real tool schema and offers it to Castia as a function tool.
+Calls execute through the same toolbox's `tools/call`, preserving grounding
+and references, including reference ID zero. Model inference and synthesis
+still use APIM only. The model service does not connect to the private toolbox.
+This follows the official BYO raw-MCP hosted-agent integration pattern, not a
+local search engine or a replacement REST retriever.
+
 `gateway.py` isolates the pinned Castia model initialization seam. The inherited
 tool loop, plain Responses calls and streaming all use its managed-auth APIM
 transport. `FOUNDRY_PROJECT_ENDPOINT` remains a real **agent project endpoint**;
@@ -38,7 +46,7 @@ and synthesis through APIM. MCP inputs follow the server-discovered schema,
 not an assumed REST `messages` payload. Source grounding records and citations
 remain available; automatic KB-side decomposition is intentionally absent.
 
-The lane fails closed until actual private server-side MCP retrieval, published
+The lane fails closed until actual private native MCP retrieval, published
 tool schema, citations and model-free configuration are verified. The native
 upstream MCP URL is an explicit routing assertion, not proof that the project
 toolbox connection matches it. Inspect that connection during acceptance.

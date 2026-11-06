@@ -282,32 +282,42 @@ configured source fields), not the REST `references`/`activity` envelope.
 Keep the returned source fields and cite their actual passages; GA does not
 promise the preview-only authenticated `citationUrl` feature.
 
-FoundryIQ remains a **server-side MCP** spec, not a local replacement search.
+FoundryIQ uses **native MCP executed by the VNet-hosted agent**, not by the
+model service. Actual model-side private MCP attempts returned upstream 424,
+while the same toolbox returned real passages through the private client.
+The explicit adaptation follows Foundry's BYO raw-MCP hosted-agent pattern:
+discover `inputSchema`, expose a Castia function tool, execute native
+`tools/call`, and return the unmodified MCP result through APIM for synthesis.
+It is not a local replacement search or a REST retrieval fallback.
 The configured native Search URL is a routing assertion: compare it to the
 actual project toolbox connection; merely setting it cannot verify that route.
 The project toolbox token uses the Foundry AI audience; a direct native Search
 MCP client would need the Search audience instead. These tokens are not
 interchangeable, and this adaptation does not silently switch transports.
 
-Passing the MCP spec through APIM in a mocked test proves client serialization
-and continuation preservation, not remote-service compatibility. Before setting
+Mocked tests prove client serialization and continuation preservation,
+not private-service compatibility. Before setting the candidate-route gate
 `WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED=true`, independently verify:
 
 1. A real selected-model tool loop through APIM, including its response/reasoning
    continuation behavior, bearer audience and private network reachability.
-2. The model service can invoke the private project toolbox MCP endpoint with
-   the FoundryIQ authorization token and actual published KB tool name.
+2. The native agent client can discover and invoke the private project toolbox
+   MCP endpoint with the Foundry AI token and actual published KB tool schema.
 3. The actual toolbox connection targets the asserted supported MCP endpoint, its
    discovered tool schema succeeds, and the KB definition has no models.
    There are no KB query-planning/synthesis calls. Any configured embedding
    calls route through APIM to the separate model account. Inspect real
    gateway/backend traces; no agent-account deployment or direct-model bypass.
-4. Retrieved citations contain the selected section-4 and policy passages.
-5. A real app-triggered investigation persists case/run/recommendation IDs in
+The route gate permits publishing a candidate, not promotion to the active app.
+The separate end-to-end promotion gate additionally requires:
+
+1. Retrieved citations contain the selected section-4 and policy passages from
+   the real hosted-agent identity and subnet, and render in the application.
+2. A real app-triggered investigation persists case/run/recommendation IDs in
    PostgreSQL, survives API restart, and escalates USD 111,000 without financial
    execution.
 
-If native MCP/toolbox compatibility or service-side private networking does
+If native MCP/toolbox compatibility or agent-side private networking does
 not support that routing, report the exact incompatibility and keep this gate
 closed. A plain Responses call does not establish FoundryIQ compatibility.
 The application raises an explicit error rather than silently dropping the KB

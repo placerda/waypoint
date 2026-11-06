@@ -19,7 +19,7 @@ from opentelemetry import trace
 from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
 
 from gateway import GatewayModel, GatewayProjectClient
-from toolbox import assurance_specs
+from toolbox import assurance_tools
 
 
 class Credential:
@@ -216,7 +216,7 @@ class GatewayTests(unittest.IsolatedAsyncioTestCase):
                             "https://private.example.org/toolboxes/contract-toolbox/mcp",
                         "WAYPOINT_FOUNDRYIQ_GATEWAY_VERIFIED": "false"}):
             with self.assertRaisesRegex(RuntimeError, "minimal MCP"):
-                await assurance_specs()
+                await assurance_tools()
 
     def test_project_and_gateway_are_distinct_endpoint_types(self) -> None:
         with self.assertRaises(ValueError):
