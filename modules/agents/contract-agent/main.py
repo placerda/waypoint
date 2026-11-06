@@ -18,6 +18,14 @@ from write_tools import write_tools
 load_dotenv()
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("toolbox").setLevel(logging.INFO)
+# Exporter failures must remain visible without recursively exporting themselves.
+for exporter_name in (
+    "azure.monitor.opentelemetry.exporter",
+    "microsoft.opentelemetry.a365.core.exporters",
+):
+    exporter_logger = logging.getLogger(exporter_name)
+    exporter_logger.propagate = False
+    exporter_logger.addHandler(logging.StreamHandler())
 
 app = Agent(name="contract-agent")
 _instructions = (

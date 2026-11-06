@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from io import StringIO
 import json
+import logging
 import os
 from pathlib import Path
 import sys
@@ -20,6 +22,35 @@ from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
 
 from gateway import GatewayModel, GatewayProjectClient
 from toolbox import assurance_tools
+
+
+class TelemetryLoggingTests(unittest.TestCase):
+    def test_exporter_errors_are_console_only_without_suppressing_application_logs(self) -> None:
+        import main
+
+        self.assertIsNotNone(main.app)
+        captured = StringIO()
+        handler = logging.StreamHandler(captured)
+        root = logging.getLogger()
+        root.addHandler(handler)
+        try:
+            for name in (
+                "azure.monitor.opentelemetry.exporter",
+                "microsoft.opentelemetry.a365.core.exporters",
+            ):
+                with self.subTest(logger=name):
+                    exporter_logger = logging.getLogger(name)
+                    self.assertFalse(exporter_logger.propagate)
+                    self.assertTrue(exporter_logger.handlers)
+                    with patch.object(exporter_logger.handlers[0], "emit") as console:
+                        logging.getLogger(name + ".test").error("Export failed")
+                    console.assert_called_once()
+                    self.assertEqual(captured.getvalue(), "")
+            logging.getLogger("toolbox").info("Application event")
+            self.assertIn("Application event", captured.getvalue())
+        finally:
+            root.removeHandler(handler)
+            handler.close()
 
 
 class Credential:
