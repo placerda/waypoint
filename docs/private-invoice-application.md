@@ -140,7 +140,11 @@ Percent-encode the role/database names when necessary. Explicit host, database,
 user, verified TLS and CA trust are mandatory. Password, passfile, service,
 host-address override and SSL-password DSN fields are rejected. The frozen
 psycopg binary/libpq supports system CA trust; an explicit trusted CA file is
-also allowed. Existing authenticated sessions are not discarded solely because
+also allowed. The deployed Debian container explicitly sets
+`SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt`, so bundled libpq/OpenSSL
+resolves the operating-system trust store when `sslrootcert=system` is used.
+Certificate and hostname verification remain mandatory.
+Existing authenticated sessions are not discarded solely because
 their original login token expires; replacement connections get refreshed
 credentials. All connections use `search_path=public`.
 

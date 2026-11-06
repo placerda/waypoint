@@ -36,6 +36,7 @@
         {"key": "APP_REQUIRE_POSTGRES", "value": true},
         {"key": "APP_DATABASE_ENTRA_ENABLED", "value": true},
         {"key": "APP_DATABASE_ENTRA_CLIENT_ID"},
+        {"key": "SSL_CERT_FILE", "value": "/etc/ssl/certs/ca-certificates.crt"},
         {"key": "APP_DATABASE_POOL_MIN_SIZE", "value": 1},
         {"key": "APP_DATABASE_POOL_MAX_SIZE", "value": 4},
         {"key": "APP_RUN_STARTUP_DATABASE_BOOTSTRAP", "value": false},
