@@ -19,6 +19,9 @@ from app.main import app
 from app.modules.assurance_runs import service as service_module
 from app.modules.assurance_runs.routes import get_assurance_runs_service
 from app.modules.assurance_runs.service import AssuranceRunsService
+from app.modules.cases.schemas import AssuranceCaseCreate
+from app.modules.cases.service import CasesService
+from app.modules.runs.schemas import AgentRunCreate, AgentRunUpdate
 
 
 class FakeFoundryClient:
@@ -29,11 +32,13 @@ class FakeFoundryClient:
         error: FoundryInvocationError | None = None,
         errors_by_invoice: dict[str, FoundryInvocationError] | None = None,
         release: asyncio.Event | None = None,
+        status: str = "in_progress",
     ) -> None:
         self.response_id = response_id
         self.error = error
         self.errors_by_invoice = errors_by_invoice or {}
         self.release = release
+        self.status = status
         self.calls: list[tuple[str, str]] = []
 
     async def start_background(self, *, agent_name: str, prompt: str) -> HostedResponseStart:
@@ -45,7 +50,7 @@ class FakeFoundryClient:
                 raise error
         if self.error is not None:
             raise self.error
-        return HostedResponseStart(response_id=self.response_id, status="in_progress")
+        return HostedResponseStart(response_id=self.response_id, status=self.status)
 
 
 @pytest.mark.asyncio
@@ -296,6 +301,135 @@ async def test_second_trigger_reuses_active_run_without_second_foundry_call(trig
     assert second.json()["reused"] is True
     assert second.json()["run"]["id"] == first.json()["run"]["id"]
     assert len(foundry.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("foundry_status", "run_status"),
+    [
+        ("queued", "pending"),
+        ("in_progress", "running"),
+        ("completed", "completed"),
+        ("failed", "failed"),
+        ("cancelled", "cancelled"),
+        ("incomplete", "failed"),
+    ],
+)
+async def test_trigger_preserves_actual_foundry_response_status(
+    trigger_client, foundry_status, run_status
+):
+    client, repository, foundry, _service = trigger_client
+    foundry.status = foundry_status
+    response = await client.post(
+        f"/api/invoices/{_invoice_id(repository)}/assurance-runs", headers=_headers()
+    )
+    assert response.status_code == 202
+    assert response.json()["run"]["status"] == run_status
+    assert response.json()["run"]["metadata"]["foundry_start_status"] == foundry_status
+
+
+@pytest.mark.asyncio
+async def test_unknown_foundry_status_fails_reserved_run(trigger_client):
+    client, repository, foundry, _service = trigger_client
+    foundry.status = "unexpected"
+    response = await client.post(
+        f"/api/invoices/{_invoice_id(repository)}/assurance-runs", headers=_headers()
+    )
+    assert response.status_code == 503
+    runs = await repository.list_agent_runs()
+    assert runs[0].status == "failed"
+    assert "unsupported response status" in runs[0].metadata["trigger_error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_after_finalize", [False, True])
+async def test_startup_cannot_overwrite_governed_completion(trigger_client, fail_after_finalize):
+    client, repository, foundry, service = trigger_client
+    invoice_id = _invoice_id(repository)
+
+    async def finalize_before_response(*, agent_name, prompt):
+        runs = await repository.list_agent_runs()
+        await service.runs.update_agent_run(
+            runs[0].id,
+            AgentRunUpdate(
+                status="completed",
+                summary="Governed assurance completed.",
+                metadata={"money_at_risk": 111000, "fanout": [{"agent_name": "FoundryIQ"}]},
+            ),
+        )
+        if fail_after_finalize:
+            raise FoundryInvocationError("Connection closed after governed completion.")
+        return HostedResponseStart(response_id=foundry.response_id, status="in_progress")
+
+    service.foundry_client.start_background = finalize_before_response
+    response = await client.post(
+        f"/api/invoices/{invoice_id}/assurance-runs", headers=_headers()
+    )
+    assert response.status_code == (503 if fail_after_finalize else 202)
+    runs = await repository.list_agent_runs()
+    assert runs[0].status == "completed"
+    assert runs[0].summary == "Governed assurance completed."
+    assert runs[0].metadata["money_at_risk"] == 111000
+    assert runs[0].metadata["fanout"] == [{"agent_name": "FoundryIQ"}]
+    if not fail_after_finalize:
+        assert runs[0].foundry_response_id == foundry.response_id
+
+
+@pytest.mark.asyncio
+async def test_recorder_backfills_case_on_reserved_trigger_run(trigger_client):
+    _client, repository, _foundry, service = trigger_client
+    invoice_id = _invoice_id(repository)
+    reserved = (await service.trigger(invoice_id=invoice_id, actor="reader")).run
+    case = await CasesService(repository).create_case(
+        AssuranceCaseCreate(invoice_id=invoice_id, summary="Grounded review."),
+        actor="recorder",
+        auth_source="test",
+    )
+    reused = await service.runs.create_agent_run(
+        AgentRunCreate(name=reserved.name, case_id=case.id),
+        actor="recorder",
+    )
+    assert reused.id == reserved.id
+    assert reused.case_id == case.id
+    assert len(await repository.list_agent_runs()) == 1
+
+
+@pytest.mark.asyncio
+async def test_startup_retry_observes_concurrent_finalization(trigger_client, monkeypatch):
+    _client, repository, _foundry, service = trigger_client
+    invoice_id = _invoice_id(repository)
+    run = (await service.trigger(invoice_id=invoice_id, actor="reader")).run
+    swap = repository.compare_and_swap_agent_run
+    raced = False
+
+    async def finalize_on_first_swap(updated, previous):
+        nonlocal raced
+        if not raced:
+            raced = True
+            await service.runs.update_agent_run(
+                run.id,
+                AgentRunUpdate(
+                    status="completed", summary="Committed.", metadata={"packet": "kept"}
+                ),
+            )
+            return False
+        return await swap(updated, previous)
+
+    monkeypatch.setattr(repository, "compare_and_swap_agent_run", finalize_on_first_swap)
+    final = await service.runs.update_agent_run_after_start(
+        run.id,
+        AgentRunUpdate(
+            status="running",
+            summary="Late startup response.",
+            foundry_response_id="response-after-race",
+            metadata={"foundry_start_status": "in_progress"},
+        ),
+    )
+    assert final is not None
+    assert final.status == "completed"
+    assert final.summary == "Committed."
+    assert final.foundry_response_id == "response-after-race"
+    assert final.metadata == {"packet": "kept", "foundry_start_status": "in_progress"}
 
 
 @pytest.mark.asyncio

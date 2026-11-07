@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 
 # Keep hosted-agent startup pressure bounded even when the API accepts the full batch.
 BATCH_ASSURANCE_CONCURRENCY = 4
+FOUNDRY_RUN_STATUSES = {
+    "queued": "pending",
+    "in_progress": "running",
+    "completed": "completed",
+    "failed": "failed",
+    "cancelled": "cancelled",
+    "incomplete": "failed",
+}
 
 
 class InvoiceNotFoundError(ValueError):
@@ -82,16 +90,17 @@ class AssuranceRunsService:
                 agent_name=agent_name,
                 prompt=f"Run the full invoice-assurance review for invoice {invoice_id}.",
             )
+            if started.status not in FOUNDRY_RUN_STATUSES:
+                raise FoundryInvocationError(
+                    f"Foundry returned an unsupported response status '{started.status}'."
+                )
         except FoundryInvocationError as exc:
-            failed = await self.runs.update_agent_run(
+            failed = await self.runs.update_agent_run_after_start(
                 run.id,
                 AgentRunUpdate(
                     status="failed",
                     summary="Foundry rejected invoice assurance startup.",
-                    metadata={
-                        **run.metadata,
-                        "trigger_error": str(exc),
-                    },
+                    metadata={"trigger_error": str(exc)},
                 ),
             )
             if failed is None:
@@ -100,14 +109,13 @@ class AssuranceRunsService:
                 ) from exc
             raise AssuranceTriggerUnavailableError(str(exc)) from exc
 
-        running = await self.runs.update_agent_run(
+        running = await self.runs.update_agent_run_after_start(
             run.id,
             AgentRunUpdate(
-                status="running",
+                status=FOUNDRY_RUN_STATUSES[started.status],
                 foundry_response_id=started.response_id,
                 summary=f"Invoice assurance is {started.status}.",
                 metadata={
-                    **run.metadata,
                     "foundry_start_status": started.status,
                 },
             ),

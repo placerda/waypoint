@@ -11,6 +11,7 @@ from .schemas import AgentRun, AgentRunCreate, AgentRunUpdate
 ACTIVE_RUN_STATUSES: tuple[str, ...] = ("running", "pending")
 REAPABLE_STATUSES: tuple[str, ...] = ("running",)
 _ENRICHABLE_FIELDS: tuple[str, ...] = (
+    "case_id",
     "app_insights_operation_id",
     "foundry_agent_name",
     "foundry_conversation_id",
@@ -101,6 +102,32 @@ class RunsService:
                 return None
             current = latest
         raise RuntimeError(f"Run '{run_id}' changed repeatedly during update.")
+
+    async def update_agent_run_after_start(
+        self,
+        run_id: str,
+        run_update: AgentRunUpdate,
+    ) -> AgentRun | None:
+        """Attach startup results without overwriting an agent's finalized record."""
+
+        current = await self.repository.get_agent_run(run_id)
+        if current is None:
+            return None
+        for _attempt in range(3):
+            changes = run_update.model_dump(exclude_unset=True)
+            if current.status not in ACTIVE_RUN_STATUSES:
+                changes.pop("status", None)
+                changes.pop("summary", None)
+            if run_update.metadata is not None:
+                changes["metadata"] = {**current.metadata, **run_update.metadata}
+            updated = current.model_copy(update={**changes, "updated_at": _now()})
+            if await self.repository.compare_and_swap_agent_run(updated, current):
+                return updated
+            latest = await self.repository.get_agent_run(run_id)
+            if latest is None:
+                return None
+            current = latest
+        raise RuntimeError(f"Run '{run_id}' changed repeatedly after Foundry startup.")
 
     @trace
     async def list_agent_runs(self, case_id: str | None = None) -> list[AgentRun]:

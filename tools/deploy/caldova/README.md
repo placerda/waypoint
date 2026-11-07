@@ -91,7 +91,9 @@ is ignored. Historical recommendations are not backfilled. Deploy this code
 only through the same candidate evaluation gate, never by changing the accepted
 production version while native evaluation is blocked.
 
-Success and failure receipts are retained as Actions artifacts. They identify
+Success and failure receipts are retained privately from the isolated executor.
+They contain prompts, responses and reasons and must never be uploaded as public
+Actions artifacts. They identify
 source commit, immutable image, candidate version, native evaluation and report.
 The deployment step rechecks all identifiers and the unchanged active baseline.
 It does not rebuild or silently select `latest`.
@@ -101,8 +103,15 @@ It does not rebuild or silently select `latest`.
 Only a completed native run with total 3, passed 3, failed 0 and errored 0
 allows the matching web image to be built. Promotion requires that successful
 web build receipt, the same source commit, the expected private repository and
-an immutable digest. The API image is unchanged because this release does not
-change its source code. Authentication configuration is preserved.
+an immutable digest. The API image is unchanged by the agent/web release. An API-only maintenance
+image has its own tested source and immutable build receipt and preserves the
+accepted agent pin and matching web image. Its source must not be presented as
+a newly evaluated agent version. Authentication configuration is preserved.
+
+The assurance trigger preserves a completed response and an agent-finalized
+run even when that completion races the startup response. Correlation backfill
+attaches the recorder's case to the initial reservation without creating a
+second run. A successful hosted response is not a financial approval.
 
 The existing single-revision web application is updated first. Its new
 revision must be ready, its root must return 200 and anonymous invoice access
