@@ -15,6 +15,7 @@ import {
   Scripts,
   ScrollRestoration,
   useLoaderData,
+  useLocation,
 } from "react-router";
 import { useEffect } from "react";
 import type { HeadersFunction, LinksFunction } from "react-router";
@@ -75,11 +76,16 @@ function Document({ children }: { children: React.ReactNode }) {
  * Root application component.
  */
 export default function App() {
+  const location = useLocation();
+  const isMsalCallback = location.pathname === "/auth/msal/callback";
   const { otelConfig, msalConfig, env, qualityOperations, buildVersion } =
     useLoaderData<typeof loader>();
 
   // Initialize telemetry on mount
   useEffect(() => {
+    if (isMsalCallback) {
+      return;
+    }
     let cancelled = false;
 
     void import("../lib/telemetry").then(
@@ -104,11 +110,15 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [otelConfig, env, buildVersion]);
+  }, [otelConfig, env, buildVersion, isMsalCallback]);
 
+  const content = <Outlet context={{ env, qualityOperations, buildVersion }} />;
+  if (isMsalCallback) {
+    return content;
+  }
   return (
     <AuthProvider localMode={env.localMode} msalConfig={msalConfig}>
-      <Outlet context={{ env, qualityOperations, buildVersion }} />
+      {content}
     </AuthProvider>
   );
 }

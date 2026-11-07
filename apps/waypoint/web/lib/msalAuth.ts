@@ -202,7 +202,7 @@ async function performMsalSignOut() {
     });
     notifyAuthStateChanged();
   } catch (err) {
-    if (!shouldFallbackToRedirectLogout(err)) {
+    if (!shouldFallbackToRedirect(err)) {
       throw err;
     }
     await client.logoutRedirect({
@@ -381,14 +381,20 @@ async function ensureAccount(
   }
 
   if (options.interactive === "popup") {
-    const result = await client.loginPopup({
-      redirectUri: getPopupRedirectUri(config),
-      scopes,
-    });
-    setActiveAccount(client, result);
-    return result.account;
+    try {
+      const result = await client.loginPopup({
+        redirectUri: getPopupRedirectUri(config),
+        scopes,
+      });
+      setActiveAccount(client, result);
+      return result.account;
+    } catch (error) {
+      if (!shouldFallbackToRedirect(error)) {
+        throw error;
+      }
+    }
   }
-  if (options.interactive === "redirect") {
+  if (options.interactive === "redirect" || options.interactive === "popup") {
     await client.loginRedirect({
       redirectStartPage: window.location.href,
       redirectUri: getPopupRedirectUri(config),
@@ -458,7 +464,7 @@ function clearAuthResponseFromUrl() {
   );
 }
 
-function shouldFallbackToRedirectLogout(err: unknown) {
+function shouldFallbackToRedirect(err: unknown) {
   if (!err || typeof err !== "object" || !("errorCode" in err)) {
     return false;
   }

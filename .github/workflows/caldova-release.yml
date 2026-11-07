@@ -50,6 +50,7 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run typecheck -- --pretty false
+          npm run auth:check
           npm run i18n:check
           npm run evidence:check
           npm run build -- --logLevel error

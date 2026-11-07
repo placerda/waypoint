@@ -19,6 +19,10 @@ The API is the authority boundary. Human users authenticate with delegated MSAL
 tokens. Agents use scoped credentials supplied by deployment. Read-only agents
 can inspect governed state; `waypoint-recorder` is the sole agent writer.
 
+Microsoft sign-in uses a popup when available. If the browser blocks that
+window, it uses the same MSAL redirect bridge in a full-page sign-in flow.
+Authentication and consent errors are not retried as popup failures.
+
 ## Invoice assurance
 
 The invoice queue exposes a live **Run assurance** action for one invoice and a
