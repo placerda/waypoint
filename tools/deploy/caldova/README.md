@@ -139,6 +139,12 @@ verified owner and repository IDs. Do not weaken GitHub's immutable-subject
 setting or replace this with the legacy name-only subject.
 
 The private VM runs a single-job ephemeral runner with a unique dispatch label.
+Its Actions Runner must be **2.327.1 or newer** for the Node.js 24 checkout
+and Azure login actions. Verify `Runner.Listener --version` on the executor
+before a full release. Hosted source checks use `ubuntu-24.04` and cannot
+verify the private executor version. See the
+[workflow runtime requirements](../../../docs/deployment.md#workflow-action-runtimes-and-runners)
+for the exact upstream action releases and conditional Docker Git requirement.
 Do not install it as a persistent service or approve untrusted pull requests for
 this executor. Require approval for all external fork contributors. The VM's
 firewall permits only reviewed outbound GitHub HTTPS destinations, not inbound

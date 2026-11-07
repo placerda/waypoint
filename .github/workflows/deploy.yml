@@ -30,22 +30,24 @@ env:
 jobs:
   deploy-agent:
     name: Deploy contract agents
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: azure/login@v3.0.0
+      - uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - uses: Azure/setup-azd@v2
+      - uses: Azure/setup-azd@v2.4.0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          prune-cache: true
 
       - name: Select or create azd environment
         run: |

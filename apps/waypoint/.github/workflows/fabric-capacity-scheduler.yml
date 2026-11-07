@@ -47,15 +47,15 @@ concurrency:
 jobs:
   control:
     name: ${{ github.event_name == 'schedule' && 'Auto-suspend' || inputs.action }} Fabric capacity
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Skip entirely when no capacity is configured, so the cron is a safe no-op in repos/forks
     # that don't run the OneLake corpus lake.
     if: ${{ vars.WAYPOINT_FABRIC_CAPACITY_NAME != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}

@@ -32,7 +32,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy Waypoint app
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: caldova
       url: ${{ steps.verify.outputs.web_url }}
@@ -40,15 +40,15 @@ jobs:
       run:
         working-directory: apps/waypoint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6.1.0
         with:
           dotnet-version: "10.0.x"
 
       - name: Cache Aspire CLI
         id: cache-aspire
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           path: ~/.aspire
           key: aspire-cli-${{ runner.os }}-${{ hashFiles('apps/waypoint/apphost.cs') }}-v1
@@ -60,16 +60,19 @@ jobs:
       - name: Add Aspire to PATH
         run: echo "$HOME/.aspire/bin" >> "$GITHUB_PATH"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          prune-cache: true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: "22"
+          package-manager-cache: false
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

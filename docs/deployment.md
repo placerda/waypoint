@@ -4,6 +4,55 @@ Waypoint deploys in two independent parts: the **application** (web, API,
 PostgreSQL) and the hosted **contract agents** in the caldova Foundry project.
 Each has its own workflow.
 
+## Workflow action runtimes and runners
+
+The active workflows in `.github/workflows` and the retained component workflow
+surfaces under `apps/waypoint`, `modules/corpus`, and `tools/deploy` use
+upstream-verified Node.js 24 action releases:
+
+| Action | Release |
+| --- | --- |
+| `actions/checkout` | `v7.0.1` |
+| `actions/setup-node` | `v7.1.0` |
+| `actions/setup-python` | `v7.1.0` |
+| `actions/setup-dotnet` | `v6.1.0` |
+| `actions/cache` | `v6.1.0` |
+| `astral-sh/setup-uv` | `v10.3.3` |
+| `azure/login` | `v3.1.0` |
+| `Azure/setup-azd` | `v2.4.0` |
+| `actions/upload-artifact` | `v7.0.2` |
+| `actions/download-artifact` | `v8.0.2` |
+| `actions/github-script` | `v9.0.0` |
+| `docker/setup-buildx-action` | `v4.4.1` |
+| `docker/build-push-action` | `v7.4.0` |
+| `DavidAnson/markdownlint-cli2-action` | `v25.0.0` |
+
+The corpus workflows retain full commit-SHA pins for the corresponding
+releases. Version tags are exact releases, not assumed major aliases (notably,
+setup-uv no longer publishes major/minor tags). Verify each release's
+`action.yml` runtime and release notes upstream before future updates.
+
+Hosted jobs are pinned to `ubuntu-24.04` to avoid the `ubuntu-latest` migration
+to Ubuntu 26.04. This changes the action execution runtime, not the application's
+`node-version`, Python/.NET versions, uv version selection, or container runtime.
+Existing explicit npm caches remain enabled; deployment without an npm cache
+keeps automatic package-manager caching disabled. uv cache pruning remains
+explicitly enabled to preserve the earlier action's behavior. Artifact archives,
+names, paths, permissions, triggers and deployment gates are unchanged.
+
+Node.js 24 actions require Actions Runner **2.327.1 or newer**, including the
+private ephemeral Linux X64 executor. Check `Runner.Listener --version` on the
+executor before a full release; a source-only hosted run cannot verify it.
+Checkout's newer credential storage additionally requires runner **2.329.0
+or newer** if authenticated Git commands run inside a Docker container action;
+the private release disables checkout credential persistence and does not use
+that path. Keep the existing private networking, unique runner label and OIDC
+identity; do not change connectivity to satisfy an action upgrade.
+
+Component workflows remain retained surfaces, not newly activated workflows.
+Their reusable-workflow references are unchanged; updating this fork does not
+update workflows fetched from `caldova/waypoint@main`.
+
 ## The agents
 
 `contract-expert`, `contract-policy-expert`, and `contract-agent` are deployed

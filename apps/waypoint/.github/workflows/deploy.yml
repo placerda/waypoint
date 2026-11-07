@@ -271,7 +271,7 @@ permissions:
 jobs:
   deploy:
     name: Deploy to Azure
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       api_fqdn: ${{ steps.deploy_outputs.outputs.api_fqdn }}
       web_fqdn: ${{ steps.deploy_outputs.outputs.web_fqdn }}
@@ -287,20 +287,20 @@ jobs:
       fabric_data_agent_id: ${{ steps.fabric_iq.outputs.data_agent_id }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           repository: caldova/waypoint
           ref: ${{ inputs.source_ref || github.ref }}
           token: ${{ secrets.REPO_TOKEN || github.token }}
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6.1.0
         with:
           dotnet-version: "10.0.x"
 
       - name: Cache Aspire CLI
         id: cache-aspire
-        uses: actions/cache@v4
+        uses: actions/cache@v6.1.0
         with:
           path: ~/.aspire
           key: aspire-cli-${{ runner.os }}-${{ hashFiles('apphost.cs') }}-v1
@@ -318,7 +318,7 @@ jobs:
           dotnet nuget locals all --list
 
       - name: Azure Login
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}

@@ -34,7 +34,7 @@ concurrency:
 jobs:
   seed:
     name: Seed demo integrations
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: caldova
     env:
       RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -44,14 +44,16 @@ jobs:
       run:
         working-directory: apps/waypoint/api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.13"
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          prune-cache: true
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

@@ -24,14 +24,15 @@ jobs:
   validate:
     name: Validate the reviewed application source
     if: github.actor == 'placerda' && github.ref == 'refs/heads/caldova-private-invoice'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v10.3.3
         with:
           version: "0.8.23"
+          prune-cache: true
       - name: Check API transport, privacy and telemetry regressions
         working-directory: apps/waypoint/api
         run: uv run --python 3.13 --frozen pytest tests/test_assurance_runs.py tests/test_telemetry.py tests/test_private_application.py tests/test_app_simplification.py -q
@@ -40,7 +41,7 @@ jobs:
         run: uv run --python 3.13 --frozen python -m unittest discover -s tests -p 'test_*.py' -q
       - name: Check fail-closed release gates
         run: uv run --no-project --python 3.13 --with-requirements tools/deploy/caldova/requirements.txt python -m unittest discover -s tools/deploy/caldova -p test_release.py
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: "24"
           cache: npm
@@ -71,7 +72,7 @@ jobs:
       CALDOVA_EVALUATION_PROJECT_ENDPOINT: ${{ vars.CALDOVA_EVALUATION_PROJECT_ENDPOINT }}
       CALDOVA_EVALUATION_PRIVATE_ADDRESS: ${{ vars.CALDOVA_EVALUATION_PRIVATE_ADDRESS }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: Prepare the isolated release tools
@@ -79,7 +80,7 @@ jobs:
           python3 -m venv .venv-caldova-release
           .venv-caldova-release/bin/pip install --disable-pip-version-check -r tools/deploy/caldova/requirements.txt
       - name: Authenticate to Azure using environment-scoped OIDC
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

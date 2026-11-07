@@ -71,7 +71,7 @@ jobs:
   # endpoint, App Insights id, Postgres server, MSAL client id, deploy-SP object id) so every
   # later job runs against the REAL caldova environment, not assumptions. No user input.
   discover:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       env_name: ${{ steps.d.outputs.env_name }}
       forge_rg: ${{ steps.d.outputs.forge_rg }}
@@ -95,9 +95,9 @@ jobs:
       fabric_admin_members_json: ${{ steps.d.outputs.fabric_admin_members_json }}
       ledgerfield_seed_uri: ${{ steps.d.outputs.ledgerfield_seed_uri }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -117,7 +117,7 @@ jobs:
   # workflow_dispatch force_all/force_fabric/only/skip overrides.
   preflight:
     needs: discover
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       needs_keygen: ${{ steps.detect.outputs.needs_keygen }}
       needs_ledgerfield: ${{ steps.detect.outputs.needs_ledgerfield }}
@@ -136,9 +136,9 @@ jobs:
       recorded_web_fqdn: ${{ steps.detect.outputs.recorded_web_fqdn }}
       recorded_api_fqdn: ${{ steps.detect.outputs.recorded_api_fqdn }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -171,7 +171,7 @@ jobs:
   provision-keyvault:
     needs: discover
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       writer_api_key: ${{ steps.kv.outputs.writer_api_key }}
       reader_api_key: ${{ steps.kv.outputs.reader_api_key }}
@@ -180,9 +180,9 @@ jobs:
       api_keys: ${{ steps.kv.outputs.api_keys }}
       kv_name: ${{ steps.kv.outputs.kv_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -204,7 +204,7 @@ jobs:
   ensure-msal:
     needs: discover
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       msal_tenant_id: ${{ steps.msal.outputs.msal_tenant_id }}
       msal_client_id: ${{ steps.msal.outputs.msal_client_id }}
@@ -215,9 +215,9 @@ jobs:
       api_app_id_uri: ${{ steps.msal.outputs.api_app_id_uri }}
       api_default_scope: ${{ steps.msal.outputs.api_default_scope }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -416,16 +416,16 @@ jobs:
   seed-import:
     needs: [discover, preflight, provision-keyvault, ledgerfield-seed, waypoint-deploy, ledgerfield-onelake-upload]
     if: ${{ always() && needs.preflight.outputs.needs_seed == 'true' && !cancelled() && (needs.waypoint-deploy.result == 'success' || needs.waypoint-deploy.result == 'skipped') && needs.ledgerfield-seed.result == 'success' && (needs.ledgerfield-onelake-upload.result == 'success' || needs.ledgerfield-onelake-upload.result == 'skipped') && needs.provision-keyvault.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Download seed artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8.0.2
         with:
           name: ${{ needs.ledgerfield-seed.outputs.artifact-name }}
           path: seed
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -446,11 +446,11 @@ jobs:
   wire:
     needs: [discover, ensure-msal, preflight, forge-deploy, waypoint-deploy, seed-import]
     if: ${{ always() && needs.preflight.outputs.needs_wire == 'true' && !cancelled() && (needs.forge-deploy.result == 'success' || needs.forge-deploy.result == 'skipped') && needs.waypoint-deploy.result == 'success' && (needs.seed-import.result == 'success' || needs.seed-import.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -485,10 +485,10 @@ jobs:
   record-state:
     needs: [discover, ensure-msal, preflight, provision-keyvault, ledgerfield-seed, forge-deploy, waypoint-deploy, ledgerfield-onelake-upload, ledgerfield-contracts-kb-upload, seed-import, wire]
     if: ${{ always() && !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3.1.0
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
